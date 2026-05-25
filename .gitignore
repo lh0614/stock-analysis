@@ -1,0 +1,34 @@
+.DS_Store
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/venv/
+backend/.venv/
+.venv/
+venv/
+
+# Build outputs
+dist/
+frontend/dist/
+build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data and local env
+backend/data/
+data/
+.env
+backend/.env
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

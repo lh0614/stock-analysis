@@ -1,0 +1,174 @@
+/**
+ * 红熊管理后台 UI 规范 — 全局主题（颜色 / 字体 / 组件覆盖）
+ */
+:root {
+  --rb-primary: #155eef;
+  --rb-blue: #4da8ff;
+  --rb-blue-light: #8baef7;
+  --rb-red: #ff5d34;
+  --rb-orange: #ff8a4c;
+  --rb-green: #369f21;
+
+  --rb-text-dark: #212332;
+  --rb-text-mid: #5b6167;
+  --rb-text-light: #a8a9aa;
+  --rb-text-white: #ffffff;
+
+  --rb-bg-page: #eff1f6;
+  --rb-bg-card: #fafafa;
+  --rb-border: #ebebeb;
+  --rb-table-header: #f5f7fc;
+  --rb-table-hover: #e9f1ff;
+  --rb-select-bg: #e1e2e7;
+
+  --rb-sidebar-width: 190px;
+  --rb-breadcrumb-height: 58px;
+  --rb-content-width: 1226px;
+  --rb-artboard-width: 1440px;
+
+  --rb-font-title-lg: 22px;
+  --rb-font-title: 16px;
+  --rb-font-body: 14px;
+  --rb-font-small: 12px;
+
+  --el-color-primary: #155eef;
+  --el-color-primary-light-3: #4da8ff;
+  --el-color-primary-light-5: #8baef7;
+  --el-color-success: #369f21;
+  --el-color-warning: #ff8a4c;
+  --el-color-danger: #ff5d34;
+  --el-border-color: #ebebeb;
+  --el-border-color-light: #ebebeb;
+  --el-fill-color-blank: #fafafa;
+  --el-bg-color: #fafafa;
+  --el-bg-color-page: #eff1f6;
+  --el-text-color-primary: #212332;
+  --el-text-color-regular: #5b6167;
+  --el-text-color-secondary: #a8a9aa;
+  --el-font-size-base: 14px;
+  --el-border-radius-base: 4px;
+  --el-component-size: 32px;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100%;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--rb-text-dark);
+  background: var(--rb-bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 按钮：悬停 70% 透明度 */
+.el-button--primary:not(.is-disabled):hover,
+.el-button--success:not(.is-disabled):hover,
+.el-button--warning:not(.is-disabled):hover,
+.el-button--danger:not(.is-disabled):hover {
+  opacity: 0.7;
+}
+
+.el-button--primary:not(.is-disabled):active,
+.el-button--success:not(.is-disabled):active,
+.el-button--warning:not(.is-disabled):active,
+.el-button--danger:not(.is-disabled):active {
+  opacity: 1;
+  filter: brightness(0.9);
+}
+
+.el-button.is-disabled,
+.el-button.is-disabled:hover {
+  opacity: 0.3;
+}
+
+.el-button--default {
+  --el-button-bg-color: #fff;
+  --el-button-border-color: var(--rb-border);
+  color: var(--rb-text-dark);
+}
+
+/* 输入框 32px / 圆角 4px */
+.el-input__wrapper {
+  border-radius: 4px;
+  padding-left: 12px;
+  min-height: 32px;
+}
+
+.el-input--small .el-input__wrapper {
+  min-height: 26px;
+}
+
+/* 卡片 */
+.el-card {
+  --el-card-bg-color: var(--rb-bg-card);
+  border: 1px solid var(--rb-border);
+  border-radius: 4px;
+}
+
+.el-card__header {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rb-text-dark);
+  border-bottom: 1px solid var(--rb-border);
+  padding: 16px 20px;
+}
+
+.el-card__body {
+  padding: 16px 20px;
+}
+
+/* 表格：无斑马纹、表头 F5F7FC */
+.el-table {
+  --el-table-header-bg-color: var(--rb-table-header);
+  --el-table-row-hover-bg-color: var(--rb-table-hover);
+  --el-table-border-color: var(--rb-border);
+  font-size: 14px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  color: var(--rb-text-dark);
+  font-size: 14px;
+}
+
+.el-table .el-table__cell {
+  padding: 16px 0;
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: var(--rb-bg-card);
+}
+
+/* 步骤条 */
+.el-step__title {
+  font-size: 14px;
+}
+
+.el-step__title.is-process {
+  color: var(--rb-primary);
+  font-weight: 600;
+}
+
+/* 菜单 */
+.el-menu {
+  border-right: none;
+}
+
+/* 分页 */
+.el-pagination {
+  font-size: 14px;
+}
+
+/* 弹窗遮罩 30% */
+.el-overlay {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* 表单标签右对齐由页面级 form 控制 */
+.rb-form .el-form-item__label {
+  justify-content: flex-end;
+  color: var(--rb-text-mid);
+  font-size: 14px;
+}

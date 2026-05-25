@@ -1,0 +1,90 @@
+/* 红熊布局与页面结构 */
+.rb-layout-shell {
+  width: 100%;
+  max-width: var(--rb-artboard-width);
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.rb-page {
+  width: 100%;
+  max-width: var(--rb-content-width);
+}
+
+.rb-page-title {
+  font-size: var(--rb-font-title-lg);
+  font-weight: 600;
+  color: var(--rb-text-dark);
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.rb-page-desc {
+  font-size: var(--rb-font-body);
+  color: var(--rb-text-mid);
+  margin: -8px 0 16px;
+}
+
+.rb-card {
+  margin-bottom: 16px;
+}
+
+.rb-card:last-child {
+  margin-bottom: 0;
+}
+
+.rb-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.rb-page-header__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rb-text-dark);
+}
+
+.rb-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.rb-section-gap {
+  margin-bottom: 16px;
+}
+
+.rb-text-mid {
+  color: var(--rb-text-mid);
+}
+
+.rb-text-light {
+  color: var(--rb-text-light);
+  font-size: 12px;
+}
+
+.rb-hint {
+  font-size: 12px;
+  color: var(--rb-text-light);
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.chart-section {
+  margin-bottom: 16px;
+}
+
+.analysis-row {
+  margin-bottom: 16px;
+}
+
+.side-row {
+  margin-bottom: 16px;
+}
+
+.bottom-section {
+  margin-bottom: 16px;
+}

@@ -1,0 +1,51 @@
+/* 驾驶舱页面 — 红熊规范 */
+.home-view {
+  width: 100%;
+}
+
+.home-view .search-card {
+  border-radius: 4px;
+}
+
+.home-view .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rb-text-dark);
+}
+
+.home-view .search-form {
+  padding: 4px 0;
+}
+
+.home-view .search-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.home-view .input-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--rb-text-mid);
+}
+
+.home-view .search-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.home-view .example-stocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.home-view .example-label {
+  font-size: 12px;
+  color: var(--rb-text-light);
+}
