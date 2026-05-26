@@ -2,8 +2,9 @@
   <div class="search-section">
     <el-card class="search-card" shadow="hover">
       <template #header>
-        <div class="card-header">
-          <span>🔍 股票查询</span>
+        <div class="card-header rb-card-header-title">
+          <el-icon><Search /></el-icon>
+          <span>股票查询</span>
         </div>
       </template>
 
@@ -102,10 +103,9 @@ defineProps({
   }
 })
 
-defineEmits(['update:searchSymbol', 'search', 'show-example', 'select-example', 'refresh'])
+const emit = defineEmits(['update:searchSymbol', 'search', 'show-example', 'select-example', 'refresh'])
 
 const handleSearch = () => {
-  const event = new CustomEvent('search')
-  window.dispatchEvent(event)
+  emit('search')
 }
 </script>

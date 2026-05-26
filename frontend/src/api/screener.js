@@ -1,24 +1,7 @@
-import axios from 'axios'
+import { API_BASE_URL, createApiClient } from './http.js'
+import { readSseStream } from './sse.js'
 
-const baseUrl = `${import.meta.env.VITE_API_BASE || '/api/v1'}/screener`
-
-const api = axios.create({ baseURL: baseUrl, timeout: 300000 })
-
-function parseSseChunk(buffer, onEvent) {
-  const parts = buffer.split('\n\n')
-  const rest = parts.pop() || ''
-  for (const block of parts) {
-    const line = block.split('\n').find((l) => l.startsWith('data: '))
-    if (line) {
-      try {
-        onEvent(JSON.parse(line.slice(6)))
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  return rest
-}
+const api = createApiClient('/screener', { timeout: 300000 })
 
 export default {
   presets() {
@@ -31,7 +14,7 @@ export default {
   },
   async runStream(presetIds, onEvent, options = {}) {
     const ids = Array.isArray(presetIds) ? presetIds : presetIds ? [presetIds] : []
-    const response = await fetch(`${baseUrl}/run/stream`, {
+    const response = await fetch(`${API_BASE_URL}/screener/run/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({
@@ -49,19 +32,9 @@ export default {
       })
     })
     if (!response.ok) throw new Error(await response.text())
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let finalResult = null
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      buffer = parseSseChunk(buffer, (ev) => {
-        onEvent(ev)
-        if (ev.event === 'complete') finalResult = ev.result
-      })
-    }
-    return finalResult
+    return readSseStream(response, {
+      onEvent,
+      isFinalEvent: (ev) => ev.event === 'complete'
+    })
   }
 }

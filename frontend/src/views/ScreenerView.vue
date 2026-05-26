@@ -2,13 +2,11 @@
   <div class="screener-page">
     <div class="screener-page__head">
       <h1 class="rb-page-title">选股器</h1>
-      <p class="rb-page-desc">
-        股票池来自本地库；K 线须先在驾驶舱拉取并生成 pkl。多选预设为交集。
-      </p>
+      <p class="rb-page-desc">股票池来自本地库；左侧按状态、操作与帮助分区说明。</p>
     </div>
 
     <el-row :gutter="12" class="screener-body">
-      <el-col :span="7" class="screener-col">
+      <el-col :xs="24" :lg="7" class="screener-col">
         <el-card shadow="never" class="panel-card">
           <template #header>
             <div class="preset-header">
@@ -18,46 +16,10 @@
             </div>
           </template>
           <div class="panel-scroll">
-            <el-checkbox-group v-model="presetIds" class="preset-list">
-              <el-checkbox
-                v-for="p in presets"
-                :key="p.id"
-                :value="p.id"
-                class="preset-item"
-              >
-                <strong>{{ p.name }}</strong>
-                <p class="preset-desc">{{ p.description }}</p>
-              </el-checkbox>
-            </el-checkbox-group>
-            <p v-if="!presetIds.length" class="preset-warn">请至少勾选一个预设</p>
-            <p v-else class="board-hint">多选时须<strong>同时满足</strong>所有已勾预设</p>
-            <el-divider />
-            <div class="universe-panel">
-              <div class="universe-panel__head">
-                <span>本地股票库</span>
-                <div class="universe-actions">
-                  <el-button
-                    size="small"
-                    type="primary"
-                    :loading="syncing"
-                    @click="syncUniverse('incremental')"
-                  >
-                    增量更新
-                  </el-button>
-                  <el-button
-                    size="small"
-                    :loading="syncing"
-                    @click="syncUniverse('full')"
-                  >
-                    全量续传
-                  </el-button>
-                </div>
-              </div>
-              <p class="board-hint">
-                增量：只补已有全量 pkl 中落后的 K 线（如昨日→今日），不续传未完成首次全量。
-              </p>
+            <section class="panel-section">
+              <h3 class="panel-section__title">状态区</h3>
               <p class="universe-stats">
-                共 {{ universeStats.total || 0 }} 只
+                本地股票库共 {{ universeStats.total || 0 }} 只
                 <span v-if="universeStats.klines_complete != null">
                   · 全量已完成 {{ universeStats.klines_complete }}
                 </span>
@@ -67,10 +29,12 @@
                 <span v-if="universeStats.klines_pending_full">
                   · 待全量 {{ universeStats.klines_pending_full }}
                 </span>
+              </p>
+              <p class="board-hint">
                 <span v-if="universeStats.last_sync_display">
-                  · 上次同步 {{ universeStats.last_sync_display }}
+                  上次同步：{{ universeStats.last_sync_display }}
                 </span>
-                <span v-else> · 尚未同步</span>
+                <span v-else>尚未同步</span>
               </p>
               <p v-if="universeStats.history_range" class="board-hint">
                 K 线范围：{{ universeStats.history_range }}（上市首日至今）
@@ -78,39 +42,85 @@
               <p v-if="universeStats.sync_reminder" class="sync-reminder">
                 {{ universeStats.sync_reminder }}
               </p>
-            </div>
+            </section>
+
             <el-divider />
-            <el-form label-width="88px" size="small">
-              <el-form-item label="仅本地K线">
-                <el-switch v-model="preferLocalCache" />
-                <p class="board-hint">开启后只读 pkl，不访问外网；无缓存则跳过</p>
-              </el-form-item>
-              <el-form-item label="扫描板块">
-                <div class="board-toggles">
-                  <el-checkbox v-model="includeChinext">创业板</el-checkbox>
-                  <el-checkbox v-model="includeStar">科创板</el-checkbox>
-                  <el-checkbox v-model="includeBse">北交所</el-checkbox>
+
+            <section class="panel-section">
+              <h3 class="panel-section__title">操作区</h3>
+              <el-checkbox-group v-model="presetIds" class="preset-list">
+                <el-checkbox
+                  v-for="p in presets"
+                  :key="p.id"
+                  :value="p.id"
+                  class="preset-item"
+                >
+                  <strong>{{ p.name }}</strong>
+                  <p class="preset-desc">{{ p.description }}</p>
+                </el-checkbox>
+              </el-checkbox-group>
+              <p v-if="!presetIds.length" class="preset-warn">请至少勾选一个预设</p>
+              <div class="universe-panel__head sync-row">
+                <span>数据同步</span>
+                <div class="universe-actions">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    :loading="syncing"
+                    @click="syncUniverse('incremental')"
+                  >
+                    增量更新
+                  </el-button>
+                  <el-button size="small" :loading="syncing" @click="syncUniverse('full')">
+                    全量续传
+                  </el-button>
                 </div>
-              </el-form-item>
-              <el-form-item label="排除 ST">
-                <el-switch v-model="excludeSt" />
-              </el-form-item>
-              <el-form-item label="扫描范围">
-                <el-radio-group v-model="scanScope">
-                  <el-radio value="filtered">按板块筛选</el-radio>
-                  <el-radio value="custom">自定义股票</el-radio>
-                </el-radio-group>
-              </el-form-item>
-              <el-form-item v-if="scanScope === 'custom'" label="代码列表">
-                <el-input
-                  v-model="customSymbolsText"
-                  type="textarea"
-                  :rows="2"
-                  placeholder="每行或逗号分隔"
-                  @blur="saveCustomPool"
-                />
-              </el-form-item>
-            </el-form>
+              </div>
+              <el-form label-width="88px" size="small" class="scan-form">
+                <el-form-item label="仅本地K线">
+                  <el-switch v-model="preferLocalCache" />
+                </el-form-item>
+                <el-form-item label="扫描板块">
+                  <div class="board-toggles">
+                    <el-checkbox v-model="includeChinext">创业板</el-checkbox>
+                    <el-checkbox v-model="includeStar">科创板</el-checkbox>
+                    <el-checkbox v-model="includeBse">北交所</el-checkbox>
+                  </div>
+                </el-form-item>
+                <el-form-item label="排除 ST">
+                  <el-switch v-model="excludeSt" />
+                </el-form-item>
+                <el-form-item label="扫描范围">
+                  <el-radio-group v-model="scanScope">
+                    <el-radio value="filtered">按板块筛选</el-radio>
+                    <el-radio value="custom">自定义股票</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item v-if="scanScope === 'custom'" label="代码列表">
+                  <el-input
+                    v-model="customSymbolsText"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="每行或逗号分隔"
+                    @blur="saveCustomPool"
+                  />
+                </el-form-item>
+              </el-form>
+            </section>
+
+            <el-divider />
+
+            <section class="panel-section panel-section--help">
+              <h3 class="panel-section__title">帮助区</h3>
+              <ul class="help-list">
+                <li>多选预设为<strong>交集</strong>：须同时满足所有已勾条件。</li>
+                <li>
+                  <strong>增量</strong>仅补已有全量 pkl 的落后日 K；<strong>全量</strong>含列表与断点续传，用于首次或未完成全量。
+                </li>
+                <li>开启「仅本地 K 线」时不访问外网；某只股票无 pkl 缓存则扫描时跳过。</li>
+                <li>K 线须先在驾驶舱或本页同步生成 pkl 后，扫描结果才可靠。</li>
+              </ul>
+            </section>
           </div>
           <div class="panel-footer">
             <el-button
@@ -132,7 +142,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="9" class="screener-col">
+      <el-col :xs="24" :lg="9" class="screener-col">
         <el-card shadow="never" class="panel-card">
           <template #header>
             <span>扫描过程</span>
@@ -156,7 +166,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="8" class="screener-col">
+      <el-col :xs="24" :lg="8" class="screener-col">
         <el-card shadow="never" class="panel-card">
           <template #header>
             <div class="result-header">
@@ -628,6 +638,37 @@ onMounted(async () => {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+}
+
+.panel-section__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.panel-section--help {
+  margin-bottom: 4px;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
+.help-list li {
+  margin-bottom: 6px;
+}
+
+.sync-row {
+  margin: 10px 0 8px;
+}
+
+.scan-form {
+  margin-top: 4px;
 }
 
 .universe-panel__head {

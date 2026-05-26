@@ -53,6 +53,20 @@
   flex-shrink: 0;
 }
 
+.rb-card-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rb-text-dark);
+}
+
+.rb-card-header-title .el-icon {
+  font-size: 18px;
+  color: var(--rb-brand, var(--el-color-primary));
+}
+
 .rb-section-gap {
   margin-bottom: 16px;
 }

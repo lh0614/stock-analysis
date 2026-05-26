@@ -2,7 +2,10 @@
   <el-card class="indicators-card" shadow="never">
     <template #header>
       <div class="card-header">
-        <span>📈 技术指标</span>
+        <span class="rb-card-header-title">
+          <el-icon><TrendCharts /></el-icon>
+          <span>技术指标</span>
+        </span>
       </div>
     </template>
 
@@ -41,7 +44,7 @@
 </template>
 
 <script setup>
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, TrendCharts } from '@element-plus/icons-vue'
 
 defineProps({
   indicatorsData: {

@@ -3,19 +3,25 @@
     <h1 class="rb-page-title">策略工坊</h1>
     <p class="rb-page-desc">上传、版本管理与参数修正（内置策略可调参）</p>
     <el-row :gutter="16">
-      <el-col :span="14">
+      <el-col :xs="24" :lg="14">
         <el-card shadow="never" class="rb-card">
           <template #header>
             <div class="rb-page-header">
               <span class="rb-page-header__title">策略列表</span>
-              <div class="rb-page-header__actions">
+              <div class="rb-page-header__actions upload-block">
                 <el-upload
-                :show-file-list="false"
-                :http-request="handleUpload"
-                accept=".py,.zip"
-              >
-                <el-button type="primary">上传策略 (.py / .zip)</el-button>
-              </el-upload>
+                  :show-file-list="false"
+                  :http-request="handleUpload"
+                  :disabled="uploading"
+                  accept=".py,.zip"
+                >
+                  <el-button type="primary" :loading="uploading">
+                    上传策略 (.py / .zip)
+                  </el-button>
+                </el-upload>
+                <p class="upload-hint">
+                  支持 Python 单文件（.py）或压缩包（.zip）；上传后写入本地策略库，可在右侧修正参数并生成新版本。
+                </p>
               </div>
             </div>
           </template>
@@ -54,7 +60,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="10">
+      <el-col :xs="24" :lg="10">
         <el-card v-if="current" shadow="never" class="rb-card">
           <template #header>策略详情 · {{ current.name }}</template>
           <el-descriptions :column="1" border size="small">
@@ -94,6 +100,15 @@
             </el-timeline-item>
           </el-timeline>
           <el-empty v-else description="暂无修订记录" />
+
+          <el-divider>沙箱预览</el-divider>
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="沙箱预览（占位）"
+            description="当前仅展示上传约束说明；真实隔离沙箱执行尚未接入。上传前请确认策略文件来源可信。"
+          />
         </el-card>
         <el-empty v-else description="选择左侧策略查看详情" />
       </el-col>
@@ -110,6 +125,7 @@ import { useWorkflowStore } from '@/stores/workflow.js'
 const wfStore = useWorkflowStore()
 const strategies = ref([])
 const loading = ref(false)
+const uploading = ref(false)
 const current = ref(null)
 const revisions = ref([])
 const reviseParams = ref({ rsi_high: 70, rsi_low: 30, macd_weight: 0.4 })
@@ -142,14 +158,31 @@ async function onSelect(row) {
   }
 }
 
+function isAllowedStrategyFile(file) {
+  const name = (file?.name || '').toLowerCase()
+  return name.endsWith('.py') || name.endsWith('.zip')
+}
+
 async function handleUpload({ file }) {
+  if (!file) {
+    ElMessage.warning('请选择要上传的文件')
+    return
+  }
+  if (!isAllowedStrategyFile(file)) {
+    ElMessage.warning('仅支持 .py 或 .zip 文件')
+    return
+  }
+  uploading.value = true
   try {
     const s = await strategyApi.upload(file)
-    ElMessage.success(`上传成功：${s.name}`)
+    const parts = [s.name, s.version && `v${s.version}`, s.id && `ID ${s.id}`].filter(Boolean)
+    ElMessage.success(`上传成功：${parts.join(' · ')}`)
     wfStore.selectStrategy(s.id)
     await load()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || e.message)
+    ElMessage.error(e.response?.data?.detail || e.message || '上传失败')
+  } finally {
+    uploading.value = false
   }
 }
 
@@ -179,4 +212,19 @@ onMounted(load)
 </script>
 
 <style scoped>
+.upload-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.upload-hint {
+  margin: 0;
+  max-width: 320px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
+  text-align: right;
+}
 </style>

@@ -1,28 +1,12 @@
-import axios from 'axios'
+import { API_BASE_URL, createApiClient } from './http.js'
+import { readSseStream } from './sse.js'
 
-const baseUrl = `${import.meta.env.VITE_API_BASE || '/api/v1'}/analysis`
-
-const api = axios.create({
-  baseURL: baseUrl,
+const api = createApiClient('/analysis', {
   timeout: 120000,
   headers: { 'Content-Type': 'application/json' }
 })
 
-function parseSseChunk(buffer, onEvent) {
-  const parts = buffer.split('\n\n')
-  const rest = parts.pop() || ''
-  for (const block of parts) {
-    const line = block.split('\n').find((l) => l.startsWith('data: '))
-    if (line) {
-      try {
-        onEvent(JSON.parse(line.slice(6)))
-      } catch {
-        /* ignore malformed */
-      }
-    }
-  }
-  return rest
-}
+const isFinalEvent = (ev) => ev.event === 'complete' || ev.event === 'error'
 
 export default {
   async runAnalysis(symbol, workflowId = null, strategyId = null) {
@@ -40,7 +24,7 @@ export default {
    * @returns {Promise<object>} 最终 complete/error 的 result
    */
   async runAnalysisStream(symbol, workflowId = null, strategyId = null, onEvent = () => {}) {
-    const response = await fetch(`${baseUrl}/run/stream`, {
+    const response = await fetch(`${API_BASE_URL}/analysis/run/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({
@@ -54,31 +38,7 @@ export default {
       const text = await response.text()
       throw new Error(text || `HTTP ${response.status}`)
     }
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let finalResult = null
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      buffer = parseSseChunk(buffer, (ev) => {
-        onEvent(ev)
-        if (ev.event === 'complete' || ev.event === 'error') {
-          finalResult = ev.result
-        }
-      })
-    }
-    if (buffer) {
-      parseSseChunk(buffer + '\n\n', (ev) => {
-        onEvent(ev)
-        if (ev.event === 'complete' || ev.event === 'error') {
-          finalResult = ev.result
-        }
-      })
-    }
-    return finalResult
+    return readSseStream(response, { onEvent, isFinalEvent, flushRemainder: true })
   },
 
   listRuns(symbol = null, limit = 20) {
@@ -96,7 +56,7 @@ export default {
   },
 
   async resumeAnalysisStream(runId, onEvent = () => {}) {
-    const response = await fetch(`${baseUrl}/resume/stream`, {
+    const response = await fetch(`${API_BASE_URL}/analysis/resume/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({ run_id: runId })
@@ -105,31 +65,7 @@ export default {
       const text = await response.text()
       throw new Error(text || `HTTP ${response.status}`)
     }
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let finalResult = null
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      buffer = parseSseChunk(buffer, (ev) => {
-        onEvent(ev)
-        if (ev.event === 'complete' || ev.event === 'error') {
-          finalResult = ev.result
-        }
-      })
-    }
-    if (buffer) {
-      parseSseChunk(buffer + '\n\n', (ev) => {
-        onEvent(ev)
-        if (ev.event === 'complete' || ev.event === 'error') {
-          finalResult = ev.result
-        }
-      })
-    }
-    return finalResult
+    return readSseStream(response, { onEvent, isFinalEvent, flushRemainder: true })
   },
 
   async getDirection(symbol) {

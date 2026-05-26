@@ -32,7 +32,10 @@ export const menuTree = [
     index: 'group-system',
     title: '系统管理',
     icon: 'Setting',
-    children: [{ index: '/settings', title: '系统设置', route: '/settings' }]
+    children: [
+      { index: '/sync-scheduler', title: '数据同步', route: '/sync-scheduler' },
+      { index: '/settings', title: '系统设置', route: '/settings' }
+    ]
   }
 ]
 
@@ -61,6 +64,10 @@ export const routeMeta = {
   '/settings': {
     title: '系统设置',
     breadcrumb: [{ title: '系统管理' }, { title: '系统设置', path: '/settings' }]
+  },
+  '/sync-scheduler': {
+    title: '数据同步',
+    breadcrumb: [{ title: '系统管理' }, { title: '数据同步', path: '/sync-scheduler' }]
   }
 }
 

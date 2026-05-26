@@ -1,20 +1,32 @@
 <template>
   <div class="rb-page home-view">
-    <h1 class="rb-page-title">分析驾驶舱</h1>
-    <p class="rb-page-desc">输入标的自动运行流水线，查看短 / 中 / 长线方向与价格结构</p>
+    <div class="home-hero">
+      <div class="home-hero__text">
+        <h1 class="rb-page-title">分析驾驶舱</h1>
+        <p class="rb-page-desc">输入标的自动运行流水线，查看短 / 中 / 长线方向与价格结构</p>
+      </div>
+      <AnalysisToolbar
+        v-if="currentSymbol"
+        class="home-hero__toolbar"
+        v-model:workflow-id="workflowStore.selectedWorkflowId"
+        v-model:strategy-id="workflowStore.selectedStrategyId"
+        :workflows="workflowStore.workflows"
+        :strategies="strategies"
+        :loading="pipelineLoading"
+        @run="runAnalysisPipeline"
+      />
+    </div>
 
-    <!-- 工作流 / 策略 -->
-    <AnalysisToolbar
-      v-if="currentSymbol"
-      v-model:workflow-id="workflowStore.selectedWorkflowId"
-      v-model:strategy-id="workflowStore.selectedStrategyId"
-      :workflows="workflowStore.workflows"
-      :strategies="strategies"
-      :loading="pipelineLoading"
-      @run="runAnalysisPipeline"
+    <BackendState
+      v-if="showBackendState"
+      :type="backendStateType"
+      :title="backendStateTitle"
+      :description="backendStateDesc"
+      :retrying="checkingStatus"
+      @retry="onBackendRetry"
     />
 
-    <el-row :gutter="16" class="side-row">
+    <el-row :gutter="16" class="cockpit-top">
       <el-col :xs="24" :md="6">
         <WatchlistPanel
           ref="watchlistRef"
@@ -87,14 +99,14 @@
     <NewsTimeline v-if="currentSymbol" :symbol="currentSymbol" />
 
     <el-row v-if="currentSymbol" :gutter="20" class="analysis-row">
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <PriceLevelsPanel
           :data="priceLevels"
           :loading="pipelineLoading"
           :error="priceError"
         />
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <ForecastTabs :forecasts="forecasts" :loading="pipelineLoading" />
       </el-col>
     </el-row>
@@ -105,14 +117,14 @@
     <!-- 技术指标和系统状态 -->
     <div v-if="currentSymbol" class="bottom-section">
       <el-row :gutter="20">
-        <el-col :span="12">
+        <el-col :xs="24" :lg="12">
           <TechnicalIndicators
             :indicators-data="indicatorsData"
             :loading="indicatorsLoading"
             :error="indicatorsError"
           />
         </el-col>
-        <el-col :span="12">
+        <el-col :xs="24" :lg="12">
           <SystemStatus
             :backend-status="backendStatus"
             :current-symbol="currentSymbol"
@@ -130,7 +142,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useWorkflowStore } from '@/stores/workflow.js'
@@ -153,6 +165,7 @@ import analysisApi from '@/api/analysis.js'
 import StockHistory from '@/components/StockHistory.vue'
 import TechnicalIndicators from '@/components/TechnicalIndicators.vue'
 import SystemStatus from '@/components/SystemStatus.vue'
+import BackendState from '@/components/common/BackendState.vue'
 import stockApi from '@/api/stock.js'
 import '@/styles/home.css'
 
@@ -179,7 +192,22 @@ const interpretation = ref(null)
 const route = useRoute()
 const workflowStore = useWorkflowStore()
 const backendStatus = ref('unknown')
+const backendUnreachable = ref(false)
 const checkingStatus = ref(false)
+
+const showBackendState = computed(() => backendStatus.value === 'error' || backendUnreachable.value)
+
+const backendStateType = computed(() => (backendUnreachable.value ? 'offline' : 'error'))
+
+const backendStateTitle = computed(() =>
+  backendUnreachable.value ? '后端服务未连接' : '部分数据加载失败'
+)
+
+const backendStateDesc = computed(() =>
+  backendUnreachable.value
+    ? '请确认 API 服务已启动（默认 http://localhost:8000），连接后可重试加载工作流与行情。'
+    : '上次请求未完全成功，可重试检查连接并刷新当前标的。'
+)
 const selectedPeriod = ref('1m')
 const lastUpdateTime = ref('')
 
@@ -236,6 +264,7 @@ const loadStockData = async (code) => {
     await fetchResumableCheckpoint()
     ElMessage.success(`股票 ${code} 数据加载成功`)
   } catch (error) {
+    backendUnreachable.value = backendStatus.value === 'error'
     ElMessage.error(`加载股票数据失败: ${error.message}`)
   } finally {
     searchLoading.value = false
@@ -385,10 +414,35 @@ const syncBackendStatus = async () => {
   try {
     const data = await stockApi.healthCheck()
     backendStatus.value = data.status
-    return data.status === 'healthy'
+    const ok = data.status === 'healthy'
+    backendUnreachable.value = !ok
+    return ok
   } catch {
     backendStatus.value = 'error'
+    backendUnreachable.value = true
     return false
+  }
+}
+
+const onBackendRetry = async () => {
+  checkingStatus.value = true
+  try {
+    const ok = await syncBackendStatus()
+    if (!ok) {
+      ElMessage.error('后端服务仍不可用')
+      return
+    }
+    await Promise.allSettled([workflowStore.fetchWorkflows(), loadStrategies()])
+    if (currentSymbol.value) {
+      await loadStockData(currentSymbol.value)
+    } else {
+      await fetchResumableCheckpoint()
+    }
+    ElMessage.success('已重新连接后端')
+  } catch (error) {
+    ElMessage.error(`重试失败: ${error.message}`)
+  } finally {
+    checkingStatus.value = false
   }
 }
 

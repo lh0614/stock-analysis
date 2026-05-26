@@ -8,6 +8,14 @@
           <span class="rb-page-header__title">工作流列表</span>
           <div class="rb-page-header__actions">
             <el-button @click="handleExport">导出</el-button>
+            <el-button @click="triggerImport">导入</el-button>
+            <input
+              ref="importInputRef"
+              type="file"
+              accept=".json,application/json"
+              class="hidden-file-input"
+              @change="handleImportFile"
+            />
             <el-button type="primary" @click="openCreate">新建工作流</el-button>
           </div>
         </div>
@@ -40,9 +48,17 @@
             <el-tag v-if="row.is_default" type="warning" size="small">默认</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="setDefault(row)">设为默认</el-button>
+            <el-button
+              v-if="row.workflow_type !== 'builtin'"
+              link
+              type="primary"
+              @click="openEdit(row)"
+            >
+              编辑
+            </el-button>
             <el-button
               v-if="row.workflow_type !== 'builtin'"
               link
@@ -56,7 +72,11 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新建工作流" width="480px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑工作流' : '新建工作流'"
+      width="480px"
+    >
       <el-form :model="form" label-width="100px">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" placeholder="例如：我的波段模板" />
@@ -88,7 +108,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveCreate">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="saveDialog">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -104,7 +124,10 @@ const wfStore = useWorkflowStore()
 const workflows = ref([])
 const loading = ref(false)
 const dialogVisible = ref(false)
+const editingId = ref(null)
 const saving = ref(false)
+const importing = ref(false)
+const importInputRef = ref(null)
 const form = ref({
   name: '',
   horizon: 'short',
@@ -128,32 +151,110 @@ async function load() {
   }
 }
 
-function openCreate() {
-  form.value = {
+function defaultForm() {
+  return {
     name: '',
     horizon: 'short',
     indicators: ['ma', 'macd', 'rsi'],
     chart_period: '1y',
     is_default: false
   }
+}
+
+function openCreate() {
+  editingId.value = null
+  form.value = defaultForm()
   dialogVisible.value = true
 }
 
-async function saveCreate() {
+function openEdit(row) {
+  if (row.workflow_type === 'builtin') {
+    ElMessage.info('内置工作流不可编辑，请新建自定义工作流')
+    return
+  }
+  editingId.value = row.id
+  form.value = {
+    name: row.name,
+    horizon: row.horizon || 'short',
+    indicators: [...(row.indicators || ['ma', 'macd', 'rsi'])],
+    chart_period: row.chart_period || '1y',
+    is_default: !!row.is_default
+  }
+  dialogVisible.value = true
+}
+
+async function saveDialog() {
   if (!form.value.name.trim()) {
     ElMessage.warning('请输入名称')
     return
   }
   saving.value = true
   try {
-    await workflowApi.create(form.value)
-    ElMessage.success('已创建')
+    if (editingId.value) {
+      await workflowApi.update(editingId.value, form.value)
+      ElMessage.success('已保存')
+    } else {
+      await workflowApi.create(form.value)
+      ElMessage.success('已创建')
+    }
     dialogVisible.value = false
+    editingId.value = null
     await load()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || e.message)
   } finally {
     saving.value = false
+  }
+}
+
+function triggerImport() {
+  importInputRef.value?.click()
+}
+
+function validateImportPayload(data) {
+  if (!data || typeof data !== 'object') return 'JSON 根节点须为对象'
+  if (!Array.isArray(data.workflows)) return '缺少 workflows 数组'
+  return null
+}
+
+async function handleImportFile(ev) {
+  const input = ev.target
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  const name = (file.name || '').toLowerCase()
+  const okExt = name.endsWith('.json')
+  const okMime =
+    !file.type || file.type === 'application/json' || file.type === 'text/json'
+  if (!okExt && !okMime) {
+    ElMessage.warning('请选择 .json 格式的工作流导出文件')
+    return
+  }
+
+  importing.value = true
+  try {
+    const text = await file.text()
+    let payload
+    try {
+      payload = JSON.parse(text)
+    } catch {
+      ElMessage.error('JSON 解析失败，请检查文件内容')
+      return
+    }
+    const err = validateImportPayload(payload)
+    if (err) {
+      ElMessage.warning(err)
+      return
+    }
+    const res = await workflowApi.importAll(payload)
+    const n = res.imported ?? payload.workflows.length
+    ElMessage.success(`已导入 ${n} 条工作流`)
+    await load()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '导入失败')
+  } finally {
+    importing.value = false
   }
 }
 
@@ -189,5 +290,9 @@ onMounted(load)
 
 .tag {
   margin-right: 4px;
+}
+
+.hidden-file-input {
+  display: none;
 }
 </style>

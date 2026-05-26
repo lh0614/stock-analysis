@@ -18,8 +18,10 @@ from app.api import (
     news,
     alerts,
     universe,
+    sync_scheduler,
 )
 from app.services.alerts import get_alert_service
+from app.services.sync_scheduler import get_sync_scheduler_service
 from datetime import datetime
 
 ALERT_POLL_SECONDS = 300
@@ -48,13 +50,16 @@ async def lifespan(app: FastAPI):
         if cache_status.get("error"):
             print(f"  原因: {cache_status['error']}")
     init_db()
-    task = asyncio.create_task(_alert_poll_loop())
+    alert_task = asyncio.create_task(_alert_poll_loop())
+    scheduler_task = asyncio.create_task(get_sync_scheduler_service().run_loop())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    scheduler_task.cancel()
+    alert_task.cancel()
+    for task in (scheduler_task, alert_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     baostock_logout()
 
 
@@ -133,6 +138,12 @@ app.include_router(
     universe.router,
     prefix=f"{settings.API_V1_STR}/universe",
     tags=["universe"],
+)
+
+app.include_router(
+    sync_scheduler.router,
+    prefix=f"{settings.API_V1_STR}/sync-scheduler",
+    tags=["sync-scheduler"],
 )
 
 @app.get("/")

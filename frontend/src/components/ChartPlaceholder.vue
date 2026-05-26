@@ -5,7 +5,10 @@
         <el-card class="chart-card" shadow="never">
           <template #header>
             <div class="card-header">
-              <span>📊 K线图分析 - {{ symbol }}</span>
+              <span class="rb-card-header-title">
+                <el-icon><Histogram /></el-icon>
+                <span>K线图分析 - {{ symbol }}</span>
+              </span>
             </div>
           </template>
 
@@ -64,7 +67,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { Loading } from '@element-plus/icons-vue'
+import { Histogram, Loading } from '@element-plus/icons-vue'
 
 defineProps({
   symbol: {

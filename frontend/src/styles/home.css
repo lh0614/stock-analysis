@@ -3,6 +3,49 @@
   width: 100%;
 }
 
+.home-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.home-hero__text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.home-hero__text .rb-page-title {
+  margin-bottom: 8px;
+}
+
+.home-hero__text .rb-page-desc {
+  margin: 0;
+}
+
+.home-hero__toolbar {
+  flex: 1 1 300px;
+  max-width: 100%;
+}
+
+.home-view .cockpit-top {
+  margin-bottom: 16px;
+}
+
+.home-view .analysis-row .el-col,
+.home-view .bottom-section .el-col {
+  margin-bottom: 16px;
+}
+
+@media (min-width: 1200px) {
+  .home-view .analysis-row .el-col,
+  .home-view .bottom-section .el-col {
+    margin-bottom: 0;
+  }
+}
+
 .home-view .search-card {
   border-radius: 4px;
 }

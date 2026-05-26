@@ -2,7 +2,10 @@
   <el-card class="status-card" shadow="never">
     <template #header>
       <div class="card-header">
-        <span>🖥️ 系统状态</span>
+        <span class="rb-card-header-title">
+          <el-icon><Monitor /></el-icon>
+          <span>系统状态</span>
+        </span>
       </div>
     </template>
 
@@ -61,7 +64,7 @@
 </template>
 
 <script setup>
-import { Connection, Delete, Download } from '@element-plus/icons-vue'
+import { Connection, Delete, Download, Monitor } from '@element-plus/icons-vue'
 
 defineProps({
   backendStatus: {

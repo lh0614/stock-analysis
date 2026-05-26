@@ -3,7 +3,7 @@
     <h1 class="rb-page-title">预警中心</h1>
     <p class="rb-page-desc">价格与指标规则，支持冷却与后台自动检测</p>
     <el-row :gutter="16">
-      <el-col :span="10">
+      <el-col :xs="24" :lg="10">
         <el-card shadow="never" class="rb-card">
           <template #header>
             <div class="rb-page-header">
@@ -26,9 +26,11 @@
                   :value="r.id"
                 />
               </el-select>
+              <p v-if="currentRuleDesc" class="rule-desc">{{ currentRuleDesc }}</p>
             </el-form-item>
             <el-form-item label="阈值">
               <el-input-number v-model="form.threshold" :step="0.1" style="width: 100%" />
+              <p v-if="thresholdUnitHint" class="rule-desc">单位：{{ thresholdUnitHint }}</p>
             </el-form-item>
             <el-form-item label="名称">
               <el-input v-model="form.name" placeholder="可选" />
@@ -43,7 +45,7 @@
         </el-card>
       </el-col>
 
-      <el-col :span="14">
+      <el-col :xs="24" :lg="14">
         <el-card shadow="never" class="rb-card" v-loading="loading">
           <template #header>预警规则</template>
           <el-table :data="alerts" border>
@@ -91,7 +93,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import alertsApi from '@/api/alerts.js'
 
@@ -107,6 +109,31 @@ const form = ref({
   name: '',
   cooldown_minutes: 60
 })
+
+const RULE_DESC = {
+  price_above: '当收盘价高于设定阈值时触发预警。',
+  price_below: '当收盘价低于设定阈值时触发预警。',
+  change_pct_above: '当日涨幅（相对昨收）超过设定百分比时触发。',
+  change_pct_below: '当日跌幅（相对昨收）超过设定百分比时触发。',
+  rsi_above: '当 RSI12 指标高于设定值时触发（常用区间 0–100）。',
+  rsi_below: '当 RSI12 指标低于设定值时触发（常用区间 0–100）。'
+}
+
+const THRESHOLD_UNITS = {
+  price_above: '元',
+  price_below: '元',
+  change_pct_above: '%',
+  change_pct_below: '%',
+  rsi_above: 'RSI 指标值（0–100）',
+  rsi_below: 'RSI 指标值（0–100）'
+}
+
+const currentRuleDesc = computed(() => RULE_DESC[form.value.rule_type] || '')
+const thresholdUnitHint = computed(() => THRESHOLD_UNITS[form.value.rule_type] || '')
+
+function isValidSymbol(symbol) {
+  return /^\d{6}$/.test(String(symbol || '').trim())
+}
 
 async function load() {
   loading.value = true
@@ -125,8 +152,12 @@ async function load() {
 }
 
 async function createAlert() {
+  if (!isValidSymbol(form.value.symbol)) {
+    ElMessage.warning('股票代码须为 6 位数字')
+    return
+  }
   try {
-    await alertsApi.create(form.value)
+    await alertsApi.create({ ...form.value, symbol: form.value.symbol.trim() })
     ElMessage.success('预警已添加')
     await load()
   } catch (e) {
@@ -165,5 +196,12 @@ onMounted(load)
 <style scoped>
 .events-card {
   margin-top: 16px;
+}
+
+.rule-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--el-text-color-secondary);
 }
 </style>

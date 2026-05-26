@@ -5,7 +5,10 @@ import json
 import os
 import re
 from datetime import datetime
-from typing import Any, Callable, Generator
+from typing import TYPE_CHECKING, Any, Callable, Generator
+
+if TYPE_CHECKING:
+    from app.services.sync_run import SyncRunLease
 
 import akshare as ak
 
@@ -442,18 +445,43 @@ class UniverseService:
             )
 
     def iter_sync_all(
-        self, *, sync_mode: str = "full"
+        self,
+        *,
+        sync_mode: str = "full",
+        run_lease: SyncRunLease | None = None,
     ) -> Generator[dict[str, Any], None, None]:
-        """sync_mode: full=断点续传+增量；incremental=仅补已有全量的落后日 K。"""
+        """sync_mode: full=断点续传+增量；incremental=仅补已有全量的落后日 K。
+
+        run_lease: 调用方已 try_acquire_sync_run 时传入，跳过二次获取，结束时仍由此处释放。
+        """
+        from app.services.sync_run import (
+            SyncRunLease,
+            release_sync_run,
+            try_acquire_sync_run,
+        )
+
+        if run_lease is None:
+            run_lease = try_acquire_sync_run()
+            if run_lease is None:
+                yield {
+                    "event": "error",
+                    "success": False,
+                    "reason": "already_running",
+                    "message": "已有同步任务正在运行，请稍后再试",
+                }
+                return
         try:
-            yield from self._iter_sync_all_impl(sync_mode=sync_mode)
-        except Exception as e:
-            yield {
-                "event": "error",
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            }
+            try:
+                yield from self._iter_sync_all_impl(sync_mode=sync_mode)
+            except Exception as e:
+                yield {
+                    "event": "error",
+                    "success": False,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+        finally:
+            release_sync_run()
 
     def _iter_sync_all_impl(
         self, *, sync_mode: str = "full"
