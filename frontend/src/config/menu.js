@@ -8,7 +8,9 @@ export const menuTree = [
     icon: 'TrendCharts',
     children: [
       { index: '/', title: '分析驾驶舱', route: '/' },
-      { index: '/screener', title: '选股器', route: '/screener' }
+      { index: '/screener', title: '选股器', route: '/screener' },
+      { index: '/intelligent-screener', title: '智能选股', route: '/intelligent-screener' },
+      { index: '/stock-deep-analysis', title: '单股深度分析', route: '/stock-deep-analysis' }
     ]
   },
   {
@@ -17,7 +19,8 @@ export const menuTree = [
     icon: 'SetUp',
     children: [
       { index: '/workflows', title: '工作流记忆', route: '/workflows' },
-      { index: '/strategies', title: '策略工坊', route: '/strategies' }
+      { index: '/strategies', title: '策略工坊', route: '/strategies' },
+      { index: '/strategy-library', title: '策略库', route: '/strategy-library' }
     ]
   },
   {
@@ -55,6 +58,14 @@ export const routeMeta = {
     title: '选股器',
     breadcrumb: [{ title: '分析中心' }, { title: '选股器', path: '/screener' }]
   },
+  '/intelligent-screener': {
+    title: '智能选股',
+    breadcrumb: [{ title: '分析中心' }, { title: '智能选股', path: '/intelligent-screener' }]
+  },
+  '/stock-deep-analysis': {
+    title: '单股深度分析',
+    breadcrumb: [{ title: '分析中心' }, { title: '单股深度分析', path: '/stock-deep-analysis' }]
+  },
   '/workflows': {
     title: '工作流记忆',
     breadcrumb: [{ title: '策略配置' }, { title: '工作流记忆', path: '/workflows' }]
@@ -62,6 +73,10 @@ export const routeMeta = {
   '/strategies': {
     title: '策略工坊',
     breadcrumb: [{ title: '策略配置' }, { title: '策略工坊', path: '/strategies' }]
+  },
+  '/strategy-library': {
+    title: '策略库',
+    breadcrumb: [{ title: '策略配置' }, { title: '策略库', path: '/strategy-library' }]
   },
   '/alerts': {
     title: '预警中心',

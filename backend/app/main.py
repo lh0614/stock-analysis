@@ -30,6 +30,12 @@ from app.api import (
     events as events_api,
     fundamentals,
     reports,
+    intelligent_screener,
+    strategy_library,
+    stock_analysis,
+    strategy_optimizer,
+    strategy_monitor,
+    intents,
 )
 from app.services.alerts import get_alert_service
 from app.services.sync_scheduler import get_sync_scheduler_service
@@ -254,4 +260,40 @@ app.include_router(
     reports.router,
     prefix=f"{settings.API_V1_STR}/reports",
     tags=["reports"],
+)
+
+app.include_router(
+    intelligent_screener.router,
+    prefix=f"{settings.API_V1_STR}/intelligent-screener",
+    tags=["intelligent-screener"],
+)
+
+app.include_router(
+    strategy_library.router,
+    prefix=f"{settings.API_V1_STR}/strategy-library",
+    tags=["strategy-library"],
+)
+
+app.include_router(
+    stock_analysis.router,
+    prefix=f"{settings.API_V1_STR}/stock-analysis",
+    tags=["stock-analysis"],
+)
+
+app.include_router(
+    strategy_optimizer.router,
+    prefix=f"{settings.API_V1_STR}/strategy-optimizer",
+    tags=["strategy-optimizer"],
+)
+
+app.include_router(
+    strategy_monitor.router,
+    prefix=f"{settings.API_V1_STR}/strategy-monitor",
+    tags=["strategy-monitor"],
+)
+
+app.include_router(
+    intents.router,
+    prefix=f"{settings.API_V1_STR}/intents",
+    tags=["intents"],
 )

@@ -29,6 +29,21 @@ const router = createRouter({
           component: () => import('../views/ScreenerView.vue')
         },
         {
+          path: 'intelligent-screener',
+          name: 'intelligent-screener',
+          component: () => import('../views/IntelligentScreenerView.vue')
+        },
+        {
+          path: 'strategy-library',
+          name: 'strategy-library',
+          component: () => import('../views/StrategyLibraryView.vue')
+        },
+        {
+          path: 'stock-deep-analysis',
+          name: 'stock-deep-analysis',
+          component: () => import('../views/StockDeepAnalysisView.vue')
+        },
+        {
           path: 'alerts',
           name: 'alerts',
           component: () => import('../views/AlertsView.vue')
