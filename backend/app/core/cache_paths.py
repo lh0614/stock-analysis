@@ -11,6 +11,12 @@ DEFAULT_STOCK_POOL_DIR = Path.home() / "Documents" / "AI" / "stock-pool"
 CACHE_SUBDIRS = ("checkpoints", "strategies", "klines")
 
 
+def _ensure_prd2_data_layout(cache_dir: str) -> None:
+    from app.core.data_paths import ensure_data_layout
+
+    ensure_data_layout()
+
+
 def resolve_cache_dir(raw: str | None = None) -> str:
     """将配置路径展开为绝对路径；相对路径相对于 backend 根目录。"""
     value = raw or str(DEFAULT_STOCK_POOL_DIR)
@@ -25,6 +31,7 @@ def ensure_cache_layout(cache_dir: str) -> None:
     os.makedirs(cache_dir, exist_ok=True)
     for name in CACHE_SUBDIRS:
         os.makedirs(os.path.join(cache_dir, name), exist_ok=True)
+    _ensure_prd2_data_layout(cache_dir)
 
 
 def check_cache_access(cache_dir: str) -> dict[str, Any]:

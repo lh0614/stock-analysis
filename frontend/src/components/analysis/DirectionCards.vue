@@ -11,7 +11,10 @@
 
     <el-alert v-else-if="error" :title="error" type="warning" show-icon :closable="false" />
 
-    <el-row v-else-if="directions" :gutter="16">
+    <template v-else>
+      <QualityBanner v-if="qualityLevel" :level="qualityLevel" :hint="qualityHint" />
+
+      <el-row v-if="directions && !directionBlocked" :gutter="16">
       <el-col v-for="item in cards" :key="item.key" :xs="24" :sm="8">
         <div class="direction-item" :class="item.bias">
           <div class="dir-header">
@@ -39,21 +42,33 @@
           />
         </div>
       </el-col>
-    </el-row>
+      </el-row>
 
-    <el-empty v-else description="暂无方向数据" />
+      <el-empty v-else-if="directionBlocked" description="数据质量 D 级，已阻断方向结论" />
 
-    <p class="disclaimer">分析结论仅供参考，不构成投资建议</p>
+      <el-empty v-else description="暂无方向数据" />
+    </template>
+
+    <p class="disclaimer">分析结论仅供研究和复盘，不构成投资建议；系统不提供实盘交易能力。</p>
   </el-card>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import QualityBanner from '@/components/common/QualityBanner.vue'
 
 const props = defineProps({
   directions: { type: Object, default: null },
   loading: { type: Boolean, default: false },
-  error: { type: String, default: '' }
+  error: { type: String, default: '' },
+  qualityLevel: { type: String, default: '' },
+  qualityHint: { type: String, default: '' }
+})
+
+const directionBlocked = computed(() => {
+  if (props.qualityLevel === 'D') return true
+  const d = props.directions
+  return d?.short?.bias === 'blocked' || d?.medium?.bias === 'blocked'
 })
 
 const HORIZON_META = {

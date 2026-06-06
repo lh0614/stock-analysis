@@ -38,6 +38,13 @@
               </el-select>
               <p class="rb-hint">增量仅补已有全量文件的落后日 K；全量含列表与断点续传</p>
             </el-form-item>
+            <el-form-item label="同步范围">
+              <el-select v-model="scope" style="width: 100%">
+                <el-option label="全市场" value="all" />
+                <el-option label="自选股" value="watchlist" />
+                <el-option label="自定义池" value="custom" />
+              </el-select>
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="saving" @click="saveConfig">保存配置</el-button>
               <el-button
@@ -48,6 +55,7 @@
               >
                 立即同步
               </el-button>
+              <el-button :loading="runningNow" @click="runDataSync">按范围同步</el-button>
             </el-form-item>
           </el-form>
         </el-card>
@@ -115,6 +123,21 @@
             />
           </div>
 
+          <el-divider />
+          <p class="muted">raw/curated/quality 三段进度</p>
+          <el-steps :active="Object.values(stageProgress).filter(v => v==='success').length" finish-status="success" align-center>
+            <el-step title="raw" :status="getStepStatus(stageProgress.raw)" />
+            <el-step title="klines" :status="getStepStatus(stageProgress.klines)" />
+            <el-step title="curated" :status="getStepStatus(stageProgress.curated)" />
+            <el-step title="quality" :status="getStepStatus(stageProgress.quality)" />
+          </el-steps>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="数据仓标的数">{{ dataStatus.symbol_count || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="K线总条数">{{ dataStatus.bar_count || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="最新交易日">{{ dataStatus.latest_trade_date || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="质量冲突数">{{ qualitySummary.conflicts || 0 }}</el-descriptions-item>
+          </el-descriptions>
+
           <el-alert
             title="选股器页面的手动同步按钮仍然可用；本页用于定时任务与统一状态查看。"
             type="info"
@@ -132,6 +155,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import syncSchedulerApi from '@/api/syncScheduler.js'
+import dataApi from '@/api/data.js'
+import qualityApi from '@/api/quality.js'
 import BackendState from '@/components/common/BackendState.vue'
 
 const loading = ref(false)
@@ -140,6 +165,10 @@ const statusLoadErrorMessage = ref('')
 const saving = ref(false)
 const runningNow = ref(false)
 const pollTimer = ref(null)
+const scope = ref('all')
+const dataStatus = ref({})
+const qualitySummary = ref({})
+const stageProgress = ref({ raw: "wait", klines: "wait", curated: "wait", quality: "wait", factors: "wait" })
 
 const form = ref({
   enabled: false,
@@ -220,6 +249,12 @@ function formatTime(iso) {
   }
 }
 
+function getStepStatus(stage) {
+  if (stage === 'running') return 'process'
+  if (stage === 'success') return 'success'
+  return 'wait'
+}
+
 function applyStatus(data) {
   status.value = { ...status.value, ...data }
   form.value.enabled = !!data.enabled
@@ -256,6 +291,10 @@ async function refreshStatus() {
   try {
     const data = await syncSchedulerApi.status()
     applyStatus(data)
+    dataStatus.value = await dataApi.status()
+    const cv = await dataApi.coverage()
+    dataStatus.value = { ...dataStatus.value, ...(cv || {}) }
+    qualitySummary.value = await qualityApi.summary()
     if (data.running) startPolling()
   } catch (e) {
     statusLoadError.value = true
@@ -264,6 +303,23 @@ async function refreshStatus() {
     ElMessage.error(e.response?.data?.detail || e.message || '加载状态失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function runDataSync() {
+  runningNow.value = true
+  try {
+    await dataApi.syncDailyBarsStream({ scope: scope.value, mode: form.value.sync_mode }, (ev) => {
+      if (ev.event === "phase_start") stageProgress.value[ev.phase] = "running"
+      if (ev.event === "phase_complete") stageProgress.value[ev.phase] = "success"
+      if (ev.event === "error") stageProgress.value.klines = "failed"
+    })
+    ElMessage.success('数据仓同步完成')
+    await refreshStatus()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '数据仓同步失败')
+  } finally {
+    runningNow.value = false
   }
 }
 

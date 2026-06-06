@@ -79,6 +79,24 @@ async def run_analysis(body: AnalysisRunRequest):
     return get_pipeline().run(symbol, body.workflow_id, body.strategy_id)
 
 
+@router.post("/refetch")
+async def refetch_and_analyze(body: AnalysisRunRequest):
+    """Clear cache and force refetch data, then run analysis."""
+    symbol = body.symbol.strip()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol 不能为空")
+
+    # 清除缓存
+    from app.services.data_store import clear_symbol_cache
+    try:
+        clear_symbol_cache(symbol)
+    except Exception as e:
+        # 即使清除失败也继续
+        pass
+
+    return get_pipeline().run(symbol, body.workflow_id, body.strategy_id)
+
+
 @router.post("/run/stream")
 async def run_analysis_stream(body: AnalysisRunRequest):
     """SSE stream of pipeline stage updates."""
@@ -122,6 +140,34 @@ async def get_analysis_run(run_id: str):
     return run
 
 
+@router.get("/runs/{run_id}/lineage")
+async def get_analysis_lineage(run_id: str):
+    run = get_pipeline().get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    return {
+        "run_id": run_id,
+        "lineage": run.get("lineage") or {},
+        "stages": run.get("stages") or [],
+    }
+
+
+@router.post("/runs/{run_id}/plan")
+async def create_plan_from_run(run_id: str):
+    from app.services.trade_plans import build_plan_draft, create_plan
+
+    run = get_pipeline().get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    draft = run.get("plan_draft") or build_plan_draft(
+        run["symbol"],
+        run.get("directions"),
+        run.get("price_levels"),
+    )
+    draft["source_run_id"] = run_id
+    return create_plan(draft)
+
+
 def _load_year_data(symbol: str):
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
@@ -129,6 +175,16 @@ def _load_year_data(symbol: str):
     if not result.get("success"):
         raise HTTPException(status_code=404, detail=result.get("error", "无数据"))
     return result["data"], result.get("metadata", {})
+
+
+@router.get("/runs/{run_id}/export")
+async def export_analysis(run_id: str, fmt: str = "json"):
+    from app.services.export_report import export_analysis_run
+
+    try:
+        return export_analysis_run(run_id, fmt)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/{symbol}/interpretation")

@@ -19,6 +19,17 @@ from app.api import (
     alerts,
     universe,
     sync_scheduler,
+    data as data_api,
+    quality,
+    backtests,
+    plans,
+    reviews,
+    market,
+    factors,
+    portfolio,
+    events as events_api,
+    fundamentals,
+    reports,
 )
 from app.services.alerts import get_alert_service
 from app.services.sync_scheduler import get_sync_scheduler_service
@@ -146,6 +157,54 @@ app.include_router(
     tags=["sync-scheduler"],
 )
 
+app.include_router(
+    data_api.router,
+    prefix=f"{settings.API_V1_STR}/data",
+    tags=["data"],
+)
+
+app.include_router(
+    quality.router,
+    prefix=f"{settings.API_V1_STR}/quality",
+    tags=["quality"],
+)
+
+app.include_router(
+    backtests.router,
+    prefix=f"{settings.API_V1_STR}/backtests",
+    tags=["backtests"],
+)
+
+app.include_router(
+    plans.router,
+    prefix=f"{settings.API_V1_STR}/plans",
+    tags=["plans"],
+)
+
+app.include_router(
+    reviews.router,
+    prefix=f"{settings.API_V1_STR}/reviews",
+    tags=["reviews"],
+)
+
+app.include_router(
+    market.router,
+    prefix=f"{settings.API_V1_STR}/market",
+    tags=["market"],
+)
+
+app.include_router(
+    factors.router,
+    prefix=f"{settings.API_V1_STR}/factors",
+    tags=["factors"],
+)
+
+app.include_router(
+    portfolio.router,
+    prefix=f"{settings.API_V1_STR}/portfolio",
+    tags=["portfolio"],
+)
+
 @app.get("/")
 async def root():
     return {
@@ -178,3 +237,21 @@ async def api_health_check():
             "ok": cache_status.get("ok"),
         },
     }
+
+app.include_router(
+    events_api.router,
+    prefix=f"{settings.API_V1_STR}/events",
+    tags=["events"],
+)
+
+app.include_router(
+    fundamentals.router,
+    prefix=f"{settings.API_V1_STR}/fundamentals",
+    tags=["fundamentals"],
+)
+
+app.include_router(
+    reports.router,
+    prefix=f"{settings.API_V1_STR}/reports",
+    tags=["reports"],
+)

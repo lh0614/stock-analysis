@@ -171,14 +171,23 @@ def run(ctx):
             rows = conn.execute(
                 "SELECT * FROM strategies ORDER BY is_builtin DESC, created_at DESC"
             ).fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["enabled"] = bool(d.get("enabled", 1))
+            out.append(d)
+        return out
 
     def get(self, strategy_id: str) -> dict[str, Any] | None:
         with get_conn() as conn:
             row = conn.execute(
                 "SELECT * FROM strategies WHERE id = ?", (strategy_id,)
             ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        d["enabled"] = bool(d.get("enabled", 1))
+        return d
 
     def get_path(self, strategy_id: str) -> str | None:
         s = self.get(strategy_id)
@@ -208,6 +217,10 @@ def run(ctx):
             with open(tmp, "wb") as f:
                 f.write(content)
             with zipfile.ZipFile(tmp, "r") as zf:
+                for member in zf.namelist():
+                    target_path = self._abs_storage(os.path.join(dest, member))
+                    if not target_path.startswith(dest):
+                        raise ValueError("zip 包含非法路径")
                 zf.extractall(dest)
             os.remove(tmp)
         elif lower.endswith(".py"):
@@ -311,6 +324,32 @@ def run(ctx):
                 (strategy_id,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+
+    def set_enabled(self, strategy_id: str, enabled: bool) -> dict[str, Any] | None:
+        s = self.get(strategy_id)
+        if not s:
+            return None
+        with get_conn() as conn:
+            conn.execute("UPDATE strategies SET enabled = ? WHERE id = ?", (1 if enabled else 0, strategy_id))
+        return self.get(strategy_id)
+
+    def list_backtest_refs(self, strategy_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        with get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM strategy_backtest_refs WHERE strategy_id = ?
+                ORDER BY created_at DESC LIMIT ?
+                """,
+                (strategy_id, limit),
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            if d.get("metrics_json"):
+                d["metrics"] = json.loads(d["metrics_json"])
+            out.append(d)
+        return out
 
     def delete(self, strategy_id: str) -> bool:
         s = self.get(strategy_id)

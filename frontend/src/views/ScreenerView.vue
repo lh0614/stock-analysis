@@ -178,6 +178,7 @@
             <el-table :data="displayResults" border size="small" height="100%">
               <el-table-column prop="symbol" label="代码" width="72" />
               <el-table-column prop="name" label="名称" min-width="72" show-overflow-tooltip />
+              <el-table-column prop="quality_level" label="质量" width="70" />
               <el-table-column label="预设" min-width="88">
                 <template #default="{ row }">
                   <el-tag
@@ -196,6 +197,7 @@
                   <el-button link type="primary" size="small" @click="goAnalyze(row.symbol)">
                     分析
                   </el-button>
+                  <el-button link size="small" @click="runBacktestFromRow(row)">回测</el-button>
                   <el-button link size="small" @click="addWatch(row)">自选</el-button>
                 </template>
               </el-table-column>
@@ -220,12 +222,15 @@
 </template>
 
 <script setup>
+import ComplianceDisclaimer from '@/components/common/ComplianceDisclaimer.vue'
+
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import screenerApi from '@/api/screener.js'
 import universeApi from '@/api/universe.js'
 import watchlistApi from '@/api/watchlist.js'
+import backtestsApi from '@/api/backtests.js'
 import AppPagination from '@/components/common/AppPagination.vue'
 
 const router = useRouter()
@@ -516,6 +521,11 @@ function goAnalyze(symbol) {
 async function addWatch(row) {
   await watchlistApi.add(row.symbol, 'default', row.name || '')
   ElMessage.success('已加入自选')
+}
+
+async function runBacktestFromRow(row) {
+  await backtestsApi.run({ symbols: [row.symbol], name: `单票回测-${row.symbol}` })
+  ElMessage.success('已创建回测任务，请到回测中心查看')
 }
 
 onMounted(async () => {

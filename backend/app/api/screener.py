@@ -13,6 +13,8 @@ class ScreenerRunRequest(BaseModel):
     preset_id: Optional[str] = None
     preset_ids: Optional[List[str]] = None
     conditions: Optional[List[dict[str, Any]]] = None
+    groups: Optional[List[dict[str, Any]]] = None
+    sort: Optional[List[dict[str, str]]] = None
     limit: int = 50
     max_scan: Optional[int] = None
     include_chinext: bool = True
@@ -20,6 +22,7 @@ class ScreenerRunRequest(BaseModel):
     include_bse: bool = True
     exclude_st: bool = True
     use_custom_pool: bool = False
+    pool_scope: str = "filtered"
     prefer_local_cache: bool = True
 
 
@@ -35,8 +38,8 @@ def _validate_screener_request(body: ScreenerRunRequest) -> None:
         if unknown:
             raise HTTPException(status_code=400, detail=f"未知预设: {', '.join(unknown)}")
         return
-    if not body.conditions:
-        raise HTTPException(status_code=400, detail="请至少选择一个预设或提供自定义条件")
+    if not body.conditions and not body.groups:
+        raise HTTPException(status_code=400, detail="请至少选择一个预设、自定义条件或条件组")
 
 
 @router.post("/run")
@@ -46,6 +49,8 @@ async def run_screener(body: ScreenerRunRequest):
         preset_id=body.preset_id,
         preset_ids=body.preset_ids,
         conditions=body.conditions,
+        groups=body.groups,
+        sort=body.sort,
         limit=min(body.limit, 500),
         max_scan=body.max_scan if body.max_scan and body.max_scan > 0 else None,
         include_chinext=body.include_chinext,
@@ -53,6 +58,7 @@ async def run_screener(body: ScreenerRunRequest):
         include_bse=body.include_bse,
         exclude_st=body.exclude_st,
         use_custom_pool=body.use_custom_pool,
+        pool_scope=body.pool_scope,
         prefer_local_cache=body.prefer_local_cache,
     )
 
@@ -67,6 +73,33 @@ async def get_screener_run_results(
         return get_screener_service().get_run_results(run_id, page, page_size)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/runs/{run_id}/backtest")
+async def screener_run_backtest(run_id: str):
+    from datetime import datetime, timedelta
+
+    from app.services.backtest import run_backtest
+    from app.services.screener import get_screener_service
+
+    try:
+        payload = get_screener_service().get_run_results(run_id, 1, 500)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    symbols = [item["symbol"] for item in payload.get("items", [])]
+    if not symbols:
+        raise HTTPException(status_code=400, detail="无命中标的可回测")
+    end = datetime.now().strftime("%Y-%m-%d")
+    start = (datetime.now() - timedelta(days=365 * 3)).strftime("%Y-%m-%d")
+    return run_backtest(
+        name=f"选股回测-{run_id[:8]}",
+        symbols=symbols,
+        start_date=start,
+        end_date=end,
+        strategy="portfolio_equal_weight",
+        rebalance="monthly",
+        filters_json={"screener_run_id": run_id},
+    )
 
 
 @router.post("/run/stream")
@@ -99,3 +132,13 @@ async def run_screener_stream(body: ScreenerRunRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/runs/{run_id}/export")
+async def export_screener(run_id: str):
+    from app.services.export_report import export_screener_csv
+
+    try:
+        return export_screener_csv(run_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e

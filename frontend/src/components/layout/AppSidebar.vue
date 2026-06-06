@@ -12,9 +12,9 @@
       :default-active="activeMenu"
       :default-openeds="openedMenus"
       class="rb-menu"
-      background-color="#ffffff"
-      text-color="#5B6167"
-      active-text-color="#155EEF"
+      background-color="#080a10"
+      text-color="#9ca3af"
+      active-text-color="#00f0ff"
       @select="onSelect"
     >
       <el-sub-menu
@@ -79,7 +79,7 @@ function onSelect(index) {
 .rb-sidebar {
   width: var(--rb-sidebar-width);
   flex-shrink: 0;
-  background: #fff;
+  background: #080a10;
   border-right: 1px solid var(--rb-border);
   display: flex;
   flex-direction: column;
@@ -94,19 +94,21 @@ function onSelect(index) {
   padding: 0 16px;
   cursor: pointer;
   border-bottom: 1px solid var(--rb-border);
+  background: #05070c;
 }
 
 .rb-sidebar__logo {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  background: var(--rb-primary);
-  color: #fff;
+  background: linear-gradient(135deg, var(--rb-primary), #38bdf8);
+  color: #000;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
 }
 
 .rb-sidebar__brand-text {
@@ -118,18 +120,19 @@ function onSelect(index) {
 .rb-sidebar__brand-text .name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--rb-text-dark);
+  color: var(--rb-text-white);
 }
 
 .rb-sidebar__brand-text .sub {
   font-size: 11px;
-  color: var(--rb-text-light);
+  color: var(--rb-text-mid);
 }
 
 .rb-menu {
   flex: 1;
   padding: 8px 0;
   overflow-y: auto;
+  border: none !important;
 }
 
 .rb-menu :deep(.el-sub-menu__title) {
@@ -146,7 +149,8 @@ function onSelect(index) {
 }
 
 .rb-menu :deep(.el-menu-item.is-active) {
-  background: var(--rb-table-hover);
+  background: rgba(0, 240, 255, 0.08) !important;
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--rb-primary);
 }
 </style>

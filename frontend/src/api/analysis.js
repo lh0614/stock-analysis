@@ -81,5 +81,15 @@ export default {
   async getForecast(symbol, horizon = 'short') {
     const { data } = await api.get(`/${symbol}/forecast`, { params: { horizon } })
     return data
+  },
+
+  async refetchAndAnalyze(symbol, workflowId = null, strategyId = null) {
+    const { data } = await api.post('/refetch', {
+      symbol,
+      workflow_id: workflowId,
+      strategy_id: strategyId,
+      auto: true
+    })
+    return data
   }
 }

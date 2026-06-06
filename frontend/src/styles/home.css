@@ -1,94 +1,279 @@
-/* 驾驶舱页面 — 红熊规范 */
+/* LSA 雅致深色驾驶舱 (Premium LSA Cockpit) 样式规范 */
+
 .home-view {
   width: 100%;
 }
 
-.home-hero {
+/* 1. 顶部控制面板终端条 (Terminal Control Bar) */
+.cockpit-terminal-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.home-hero__text {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.home-hero__text .rb-page-title {
-  margin-bottom: 8px;
-}
-
-.home-hero__text .rb-page-desc {
-  margin: 0;
-}
-
-.home-hero__toolbar {
-  flex: 1 1 300px;
-  max-width: 100%;
-}
-
-.home-view .cockpit-top {
-  margin-bottom: 16px;
-}
-
-.home-view .analysis-row .el-col,
-.home-view .bottom-section .el-col {
-  margin-bottom: 16px;
-}
-
-@media (min-width: 1200px) {
-  .home-view .analysis-row .el-col,
-  .home-view .bottom-section .el-col {
-    margin-bottom: 0;
-  }
-}
-
-.home-view .search-card {
-  border-radius: 4px;
-}
-
-.home-view .card-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--rb-text-dark);
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(17, 19, 28, 0.6);
+  border: 1px solid var(--rb-border);
+  border-radius: 6px;
+  padding: 10px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.home-view .search-form {
-  padding: 4px 0;
-}
-
-.home-view .search-input-group {
+.terminal-left {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
 }
 
-.home-view .input-label {
-  font-weight: 600;
-  font-size: 14px;
+.terminal-brand-glow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rb-primary);
+}
+
+.pulse-icon {
+  animation: titanium-pulse 2.5s infinite alternate;
+}
+
+@keyframes titanium-pulse {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; filter: drop-shadow(0 0 2px var(--rb-primary)); }
+}
+
+.terminal-search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-search-input {
+  width: 130px;
+}
+
+.terminal-search-input :deep(.el-input__wrapper) {
+  border-radius: 4px;
+}
+
+.terminal-tags-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-tag-label {
+  font-size: 12px;
   color: var(--rb-text-mid);
 }
 
-.home-view .search-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.terminal-stock-badge {
+  font-size: 11px;
+  background: #141724;
+  color: var(--rb-text-mid);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--rb-border);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
 }
 
-.home-view .example-stocks {
+.terminal-stock-badge:hover {
+  color: var(--rb-primary);
+  border-color: var(--rb-primary);
+}
+
+.terminal-stock-badge.active {
+  color: var(--rb-text-white);
+  background: var(--rb-primary);
+  border-color: var(--rb-primary);
+  font-weight: 600;
+}
+
+.terminal-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 2. 标的方向及看板 (Decision Banner) */
+.decision-cards-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(17, 19, 28, 0.4);
+  border: 1px solid var(--rb-border);
+  border-radius: 6px;
+  padding: 12px 18px;
+}
+
+.cockpit-summary-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stock-title-glow {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--rb-text-white);
+  margin: 0;
+}
+
+.stock-code-glow {
+  font-size: 14px;
+  color: var(--rb-text-mid);
+  margin-left: 6px;
+  font-family: monospace;
+}
+
+.stock-meta-ticks {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.tick-item {
+  color: var(--rb-text-mid);
+}
+
+.text-glow {
+  color: var(--rb-text-white);
+}
+
+.bull-glow {
+  color: var(--rb-green);
+  font-weight: 600;
+}
+
+.bear-glow {
+  color: var(--rb-red);
+  font-weight: 600;
+}
+
+.decision-direction-badge-container {
+  display: flex;
   align-items: center;
 }
 
-.home-view .example-label {
-  font-size: 12px;
-  color: var(--rb-text-light);
+/* 3. 核心 K 线外围卡片微调 */
+.chart-card-wrapper {
+  border-color: var(--rb-border) !important;
+}
+
+/* 4. 仪表盘 Tab (Instrument Tab) 样式 */
+.details-tabs-card {
+  border-color: var(--rb-border);
+}
+
+.details-tabs-card :deep(.el-card__body) {
+  padding: 0 !important;
+}
+
+.tech-tabs :deep(.el-tabs__header) {
+  background: #0d0f19 !important;
+  border-bottom: 1px solid var(--rb-border) !important;
+  margin: 0 !important;
+  padding: 4px 10px 0;
+}
+
+.tech-tabs :deep(.el-tabs__nav-wrap) {
+  margin-bottom: -1px;
+}
+
+.tech-tabs :deep(.el-tabs__item) {
+  font-size: 13px;
+  color: var(--rb-text-mid) !important;
+  height: 38px;
+  line-height: 38px;
+  border: 1px solid transparent !important;
+  border-bottom: none !important;
+  transition: all 0.2s;
+}
+
+.tech-tabs :deep(.el-tabs__item:hover) {
+  color: var(--rb-primary) !important;
+}
+
+.tech-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--rb-text-white) !important;
+  background: var(--rb-bg-card) !important;
+  border-color: var(--rb-border) var(--rb-border) transparent !important;
+  font-weight: 600;
+}
+
+.tech-tabs :deep(.el-tabs__content) {
+  padding: 16px;
+  background: var(--rb-bg-card);
+}
+
+/* 5. 辅助工具样式 */
+.card-header-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.warning-neon-color {
+  color: var(--rb-orange);
+}
+
+.primary-neon-color {
+  color: var(--rb-primary);
+}
+
+.border-neon-warning {
+  border-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+.border-neon-primary {
+  border-color: rgba(99, 102, 241, 0.1) !important;
+}
+
+.text-glow-yellow {
+  color: var(--rb-orange);
+  font-weight: 600;
+}
+
+.text-glow-blue {
+  color: var(--rb-primary);
+  font-weight: 600;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+.font-12 { font-size: 12px; }
+.font-13 { font-size: 13px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-12 { margin-bottom: 12px; }
+.mb-16 { margin-bottom: 16px; }
+
+/* 响应式微调 */
+@media (max-width: 768px) {
+  .cockpit-terminal-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .terminal-left {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .terminal-search-wrapper {
+    width: 100%;
+  }
+  .terminal-search-input {
+    flex: 1;
+  }
+  .terminal-right {
+    justify-content: space-between;
+  }
 }

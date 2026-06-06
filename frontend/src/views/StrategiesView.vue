@@ -117,6 +117,8 @@
 </template>
 
 <script setup>
+import ComplianceDisclaimer from '@/components/common/ComplianceDisclaimer.vue'
+
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import strategyApi from '@/api/strategy.js'

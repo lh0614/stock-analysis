@@ -18,6 +18,8 @@ RULE_LABELS = {
     "change_pct_below": "日跌幅超过(%)",
     "rsi_above": "RSI12 高于",
     "rsi_below": "RSI12 低于",
+    "composite": "组合条件",
+    "quality_d": "数据质量D级",
 }
 
 
@@ -45,6 +47,8 @@ class AlertService:
         rule = data["rule_type"]
         if rule not in RULE_LABELS:
             raise ValueError(f"不支持的规则类型: {rule}")
+        payload = data.get("payload") or {}
+        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
         with get_conn() as conn:
             conn.execute(
                 """
@@ -56,7 +60,7 @@ class AlertService:
                     data["symbol"].strip(),
                     data.get("name") or RULE_LABELS[rule],
                     rule,
-                    float(data["threshold"]),
+                    threshold,
                     1 if data.get("enabled", True) else 0,
                     int(data.get("cooldown_minutes", 60)),
                     now,
@@ -73,6 +77,8 @@ class AlertService:
         cur = self.get(alert_id)
         if not cur:
             return None
+        payload = data.get("payload") or {}
+        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
         with get_conn() as conn:
             conn.execute(
                 """
@@ -90,6 +96,8 @@ class AlertService:
         return self.get(alert_id)
 
     def delete(self, alert_id: str) -> bool:
+        payload = data.get("payload") or {}
+        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
         with get_conn() as conn:
             conn.execute("DELETE FROM alert_events WHERE alert_id = ?", (alert_id,))
             cur = conn.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
@@ -164,6 +172,18 @@ class AlertService:
         elif rule == "rsi_below" and rsi12 is not None:
             fired = rsi12 < th
             detail = {"rsi12": rsi12, "threshold": th}
+        elif rule == "quality_d":
+            from app.services.data_quality import assess_symbol
+            q = assess_symbol(alert["symbol"])
+            fired = q.get("quality_level") == "D"
+            detail = q
+        elif rule == "composite":
+            # 简化组合：price_above + rsi_below 由 threshold 与 payload.rsi 共同触发
+            from app.services.data_quality import assess_symbol
+            q = assess_symbol(alert["symbol"])
+            rsi_th = 30
+            fired = close > th and (rsi12 is not None and rsi12 < rsi_th) and q.get("quality_level") != "D"
+            detail = {"close": close, "threshold": th, "rsi12": rsi12, "rsi_th": rsi_th, "quality": q.get("quality_level")}
 
         if not fired:
             return None
@@ -171,6 +191,8 @@ class AlertService:
         msg = f"{alert['symbol']} {alert['name']} 已触发"
         now = datetime.now().isoformat()
         eid = str(uuid.uuid4())
+        payload = data.get("payload") or {}
+        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
         with get_conn() as conn:
             conn.execute(
                 """

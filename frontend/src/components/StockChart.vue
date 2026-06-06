@@ -1,27 +1,25 @@
 <!-- frontend/src/components/StockChart.vue -->
 <template>
-  <el-card shadow="never" class="rb-card stock-chart">
-    <template #header>
-      <div class="rb-page-header">
-        <span class="rb-page-header__title">{{ symbol }} · K 线</span>
-        <div class="rb-page-header__actions controls">
-          <el-select v-model="period" size="small" @change="fetchData">
-            <el-option label="1 个月" value="1m" />
-            <el-option label="3 个月" value="3m" />
-            <el-option label="6 个月" value="6m" />
-            <el-option label="1 年" value="1y" />
-            <el-option label="全部" value="all" />
-          </el-select>
-          <el-select v-model="dataSource" size="small" @change="fetchData">
-            <el-option label="自动" value="auto" />
-            <el-option label="东方财富" value="eastmoney" />
-            <el-option label="AKShare" value="akshare" />
-            <el-option label="Baostock" value="baostock" />
-          </el-select>
-          <el-button size="small" :loading="loading" @click="fetchData">刷新</el-button>
-        </div>
+  <div class="stock-chart">
+    <div class="chart-header">
+      <span class="chart-title">{{ symbol }} · K 线</span>
+      <div class="chart-controls">
+        <el-select v-model="period" size="small" @change="fetchData">
+          <el-option label="1 个月" value="1m" />
+          <el-option label="3 个月" value="3m" />
+          <el-option label="6 个月" value="6m" />
+          <el-option label="1 年" value="1y" />
+          <el-option label="全部" value="all" />
+        </el-select>
+        <el-select v-model="dataSource" size="small" @change="fetchData">
+          <el-option label="自动" value="auto" />
+          <el-option label="东方财富" value="eastmoney" />
+          <el-option label="AKShare" value="akshare" />
+          <el-option label="Baostock" value="baostock" />
+        </el-select>
+        <el-button size="small" :loading="loading" @click="fetchData">刷新</el-button>
       </div>
-    </template>
+    </div>
 
     <div v-show="loading" class="chart-state">
       <el-icon class="is-loading"><Loading /></el-icon>
@@ -49,7 +47,7 @@
         </span>
       </div>
     </div>
-  </el-card>
+  </div>
 </template>
 
 <script setup>
@@ -148,20 +146,21 @@ function buildChartOption(rows) {
       left: 'center',
       itemWidth: 14,
       itemHeight: 8,
-      textStyle: { color: '#5b6167', fontSize: 12 },
+      textStyle: { color: '#94a3b8', fontSize: 12 },
       data: ['K线', 'MA5', 'MA10', 'MA20', '成交量']
     },
     axisPointer: {
       link: [{ xAxisIndex: [0, 1] }],
-      label: { backgroundColor: '#212332' }
+      label: { backgroundColor: '#11131c' }
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(33, 35, 50, 0.92)',
-      borderWidth: 0,
+      backgroundColor: 'rgba(17, 19, 28, 0.95)',
+      borderWidth: 1,
+      borderColor: '#1e293b',
       padding: [10, 14],
-      textStyle: { color: '#fff', fontSize: 12 },
-      axisPointer: { type: 'cross', crossStyle: { color: '#a8a9aa' } },
+      textStyle: { color: '#f8fafc', fontSize: 12 },
+      axisPointer: { type: 'cross', crossStyle: { color: '#64748b' } },
       formatter(params) {
         if (!params?.length) return ''
         const idx = params[0].dataIndex
@@ -171,13 +170,13 @@ function buildChartOption(rows) {
         const chgPct = row.open ? ((chg / row.open) * 100).toFixed(2) : '0.00'
         const color = chg >= 0 ? UP : DOWN
         const sign = chg >= 0 ? '+' : ''
-        let html = `<div style="font-weight:600;margin-bottom:6px">${dates[idx]}</div>`
-        html += `<div>开 <b>${row.open}</b> 高 <b>${row.high}</b> 低 <b>${row.low}</b> 收 <b style="color:${color}">${row.close}</b></div>`
+        let html = `<div style="font-weight:600;margin-bottom:6px;color:#f8fafc">${dates[idx]}</div>`
+        html += `<div>开 <b style="color:#f8fafc">${row.open}</b> 高 <b style="color:#f8fafc">${row.high}</b> 低 <b style="color:#f8fafc">${row.low}</b> 收 <b style="color:${color}">${row.close}</b></div>`
         html += `<div style="color:${color}">涨跌 ${sign}${chg.toFixed(2)} (${sign}${chgPct}%)</div>`
-        html += `<div>成交量 ${formatVolume(row.volume ?? 0)}</div>`
+        html += `<div>成交量 <b style="color:#f8fafc">${formatVolume(row.volume ?? 0)}</b></div>`
         params.forEach((p) => {
           if (p.seriesName.startsWith('MA') && p.data != null) {
-            html += `<div>${p.marker} ${p.seriesName} ${p.data}</div>`
+            html += `<div>${p.marker} ${p.seriesName} <b style="color:#f8fafc">${p.data}</b></div>`
           }
         })
         return html
@@ -193,9 +192,9 @@ function buildChartOption(rows) {
         gridIndex: 0,
         data: dates,
         boundaryGap: true,
-        axisLine: { lineStyle: { color: '#ebebeb' } },
+        axisLine: { lineStyle: { color: '#1e293b' } },
         axisTick: { show: false },
-        axisLabel: { color: '#a8a9aa', fontSize: 11, margin: 8 },
+        axisLabel: { color: '#94a3b8', fontSize: 11, margin: 8 },
         splitLine: { show: false },
         min: 'dataMin',
         max: 'dataMax'
@@ -220,11 +219,11 @@ function buildChartOption(rows) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: '#a8a9aa',
+          color: '#94a3b8',
           fontSize: 11,
           formatter: (v) => Number(v).toFixed(2)
         },
-        splitLine: { lineStyle: { color: '#f0f2f5', type: 'dashed' } }
+        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.04)', type: 'dashed' } }
       },
       {
         type: 'value',
@@ -234,7 +233,7 @@ function buildChartOption(rows) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: '#a8a9aa',
+          color: '#94a3b8',
           fontSize: 10,
           formatter: (v) => formatVolume(v)
         },
@@ -255,10 +254,10 @@ function buildChartOption(rows) {
         height: 22,
         start: zoomStart,
         end: 100,
-        borderColor: '#ebebeb',
-        fillerColor: 'rgba(21, 94, 239, 0.12)',
-        handleStyle: { color: '#155eef' },
-        textStyle: { color: '#a8a9aa', fontSize: 10 },
+        borderColor: '#1e293b',
+        fillerColor: 'rgba(99, 102, 241, 0.08)',
+        handleStyle: { color: '#6366f1' },
+        textStyle: { color: '#64748b', fontSize: 10 },
         brushSelect: false
       }
     ],
@@ -432,7 +431,22 @@ onUnmounted(() => {
   width: 100%;
 }
 
-.stock-chart .controls {
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0 12px 0;
+  border-bottom: 1px solid var(--rb-border);
+  margin-bottom: 16px;
+}
+
+.chart-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rb-text-white);
+}
+
+.chart-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -445,7 +459,7 @@ onUnmounted(() => {
 
 .chart-canvas {
   width: 100%;
-  height: 520px;
+  height: 600px;
 }
 
 .chart-state {
@@ -454,8 +468,8 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
   gap: 12px;
-  min-height: 320px;
-  color: var(--rb-text-mid, #5b6167);
+  min-height: 400px;
+  color: var(--rb-text-mid);
   font-size: 14px;
 }
 
@@ -463,16 +477,17 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--rb-border, #ebebeb);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rb-border);
 }
 
 .meta-tag {
   font-size: 12px;
-  color: var(--rb-text-mid, #5b6167);
-  background: var(--rb-bg-page, #eff1f6);
-  padding: 4px 10px;
+  color: var(--rb-text-mid);
+  background: rgba(30, 41, 59, 0.3);
+  padding: 6px 12px;
   border-radius: 4px;
+  border: 1px solid var(--rb-border);
 }
 </style>

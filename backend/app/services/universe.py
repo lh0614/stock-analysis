@@ -531,6 +531,19 @@ class UniverseService:
         if klines_summary and klines_summary.get("ok") is not None:
             self._record_klines_sync(klines_summary)
 
+        quality_summary = None
+        if not paused and symbols:
+            try:
+                from app.services.curated_sync import ingest_symbols
+                from app.services.data_quality import build_quality_report
+                from app.services.factors import recompute
+
+                ingest_symbols(symbols[:2000])
+                quality_summary = build_quality_report(symbols[:2000])
+                recompute(symbols[:2000])
+            except Exception:
+                quality_summary = {"error": "post_sync_pipeline_failed"}
+
         stats = self.get_stats()
         reg = stats.get("klines_registry") or {}
         if paused:
@@ -554,6 +567,7 @@ class UniverseService:
             "message": msg,
             "list": list_result,
             "klines": klines_summary,
+            "quality": quality_summary,
             "stats": stats,
             "folder": self._folder_snapshot(local_map),
         }

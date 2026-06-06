@@ -2,49 +2,49 @@
  * 红熊管理后台 UI 规范 — 全局主题（颜色 / 字体 / 组件覆盖）
  */
 :root {
-  --rb-primary: #155eef;
-  --rb-blue: #4da8ff;
-  --rb-blue-light: #8baef7;
-  --rb-red: #ff5d34;
-  --rb-orange: #ff8a4c;
-  --rb-green: #369f21;
+  --rb-primary: #6366f1;
+  --rb-blue: #818cf8;
+  --rb-blue-light: rgba(99, 102, 241, 0.06);
+  --rb-red: #f43f5e;
+  --rb-orange: #f59e0b;
+  --rb-green: #10b981;
 
-  --rb-text-dark: #212332;
-  --rb-text-mid: #5b6167;
-  --rb-text-light: #a8a9aa;
+  --rb-text-dark: #f8fafc;
+  --rb-text-mid: #94a3b8;
+  --rb-text-light: #64748b;
   --rb-text-white: #ffffff;
 
-  --rb-bg-page: #eff1f6;
-  --rb-bg-card: #fafafa;
-  --rb-border: #ebebeb;
-  --rb-table-header: #f5f7fc;
-  --rb-table-hover: #e9f1ff;
-  --rb-select-bg: #e1e2e7;
+  --rb-bg-page: #08090d;
+  --rb-bg-card: #11131c;
+  --rb-border: #1e293b;
+  --rb-table-header: #151722;
+  --rb-table-hover: #1c1e2e;
+  --rb-select-bg: #1e293b;
 
   --rb-sidebar-width: 190px;
   --rb-breadcrumb-height: 58px;
-  --rb-content-width: 1226px;
-  --rb-artboard-width: 1440px;
+  --rb-content-width: 1380px;
+  --rb-artboard-width: 1600px;
 
   --rb-font-title-lg: 22px;
   --rb-font-title: 16px;
   --rb-font-body: 14px;
   --rb-font-small: 12px;
 
-  --el-color-primary: #155eef;
-  --el-color-primary-light-3: #4da8ff;
-  --el-color-primary-light-5: #8baef7;
-  --el-color-success: #369f21;
-  --el-color-warning: #ff8a4c;
-  --el-color-danger: #ff5d34;
-  --el-border-color: #ebebeb;
-  --el-border-color-light: #ebebeb;
-  --el-fill-color-blank: #fafafa;
-  --el-bg-color: #fafafa;
-  --el-bg-color-page: #eff1f6;
-  --el-text-color-primary: #212332;
-  --el-text-color-regular: #5b6167;
-  --el-text-color-secondary: #a8a9aa;
+  --el-color-primary: #6366f1;
+  --el-color-primary-light-3: #818cf8;
+  --el-color-primary-light-5: #a5b4fc;
+  --el-color-success: #10b981;
+  --el-color-warning: #f59e0b;
+  --el-color-danger: #f43f5e;
+  --el-border-color: #1e293b;
+  --el-border-color-light: #1c1e2e;
+  --el-fill-color-blank: #11131c;
+  --el-bg-color: #11131c;
+  --el-bg-color-page: #08090d;
+  --el-text-color-primary: #f8fafc;
+  --el-text-color-regular: #94a3b8;
+  --el-text-color-secondary: #64748b;
   --el-font-size-base: 14px;
   --el-border-radius-base: 4px;
   --el-component-size: 32px;
@@ -84,57 +84,91 @@ body,
 }
 
 .el-button--default {
-  --el-button-bg-color: #fff;
+  --el-button-bg-color: #111425;
   --el-button-border-color: var(--rb-border);
   color: var(--rb-text-dark);
 }
 
-/* 输入框 32px / 圆角 4px */
+/* 输入框 32px / 圆角 4px / 高端磨砂底 */
 .el-input__wrapper {
+  background-color: #141725 !important;
   border-radius: 4px;
   padding-left: 12px;
   min-height: 32px;
+  box-shadow: 0 0 0 1px var(--rb-border) inset !important;
 }
 
-.el-input--small .el-input__wrapper {
-  min-height: 26px;
+.el-input__inner {
+  color: var(--rb-text-dark) !important;
 }
 
-/* 卡片 */
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--rb-primary) inset, 0 0 8px rgba(99, 102, 241, 0.15) !important;
+}
+
+/* 卡片 - 高雅哑光黑曜石 */
 .el-card {
   --el-card-bg-color: var(--rb-bg-card);
   border: 1px solid var(--rb-border);
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.el-card:hover {
+  border-color: #334155;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
 }
 
 .el-card__header {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--rb-text-dark);
+  color: var(--rb-text-white);
   border-bottom: 1px solid var(--rb-border);
-  padding: 16px 20px;
+  padding: 10px 16px;
+  background: rgba(21, 23, 34, 0.3);
 }
 
 .el-card__body {
-  padding: 16px 20px;
+  padding: 16px;
 }
 
-/* 表格：无斑马纹、表头 F5F7FC */
+/* 科技滚动条 */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #08090d;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--rb-primary);
+}
+
+/* 表格：无斑马纹、低 padding、高信息密度 */
 .el-table {
   --el-table-header-bg-color: var(--rb-table-header);
   --el-table-row-hover-bg-color: var(--rb-table-hover);
   --el-table-border-color: var(--rb-border);
-  font-size: 14px;
+  font-size: 13px;
+  background-color: transparent !important;
 }
 
 .el-table th.el-table__cell {
   font-weight: 600;
-  color: var(--rb-text-dark);
-  font-size: 14px;
+  color: var(--rb-text-mid);
+  font-size: 12px;
+  background-color: var(--rb-table-header) !important;
 }
 
 .el-table .el-table__cell {
-  padding: 16px 0;
+  padding: 8px 0;
 }
 
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
@@ -171,4 +205,38 @@ body,
   justify-content: flex-end;
   color: var(--rb-text-mid);
   font-size: 14px;
+}
+
+/* el-descriptions 高端暗黑无缝覆盖 */
+.el-descriptions {
+  --el-descriptions-item-bordered-label-background: #151824 !important;
+}
+
+.el-descriptions__table {
+  border-collapse: collapse !important;
+  background-color: transparent !important;
+}
+
+.el-descriptions__label {
+  background-color: #141724 !important; /* 精致低调暗炭灰 */
+  color: var(--rb-text-mid) !important;
+  font-weight: 600 !important;
+  border-color: var(--rb-border) !important;
+  font-size: 12px !important;
+  padding: 8px 12px !important;
+}
+
+.el-descriptions__content {
+  background-color: #11131c !important; /* 纯正黑曜石卡片底色 */
+  color: var(--rb-text-dark) !important;
+  border-color: var(--rb-border) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 8px 12px !important;
+  font-family: monospace, 'PingFang SC', sans-serif !important;
+}
+
+/* 进度条轨道暗化 */
+.el-progress-bar__outer {
+  background-color: #1a1e2d !important;
 }

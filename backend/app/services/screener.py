@@ -71,9 +71,16 @@ def _build_scan_universe(
     include_bse: bool = True,
     exclude_st: bool = True,
     use_custom_pool: bool = False,
+    pool_scope: str = "filtered",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     svc = get_universe_service()
-    if use_custom_pool:
+    if pool_scope == "watchlist":
+        with get_conn() as conn:
+            rows = conn.execute("SELECT DISTINCT symbol FROM watchlist_items").fetchall()
+        symbols = [r["symbol"] for r in rows]
+        filtered = svc.query(symbols=symbols) if symbols else []
+        pool_total = len(symbols)
+    elif use_custom_pool or pool_scope == "custom":
         symbols = svc.get_custom_pool()
         filtered = svc.query(symbols=symbols) if symbols else []
         pool_total = len(symbols)
@@ -128,8 +135,14 @@ def _extract_metrics(records: list[dict], indicators: dict[str, Any]) -> dict[st
     vol5 = sum(volumes[-5:]) / 5 if len(volumes) >= 5 else 0
     vol20 = sum(volumes[-20:]) / 20 if len(volumes) >= 20 else 0
     prev_close = float(records[-2].get("close") or close) if len(records) > 1 else close
+    ret_20 = 0.0
+    if len(records) > 21:
+        c0 = float(records[-21].get("close") or close)
+        if c0 > 0:
+            ret_20 = (close - c0) / c0
     return {
         "rsi12": rsi.get("rsi12"),
+        "return_20d": ret_20,
         "macd": macd.get("macd"),
         "close": close,
         "close_above_ma20": close > (ma.get("ma20") or close + 1),
@@ -137,6 +150,23 @@ def _extract_metrics(records: list[dict], indicators: dict[str, Any]) -> dict[st
         "volume_surge": vol20 > 0 and vol5 > vol20 * 1.5 and close > prev_close,
         "change_pct": ((close - prev_close) / prev_close * 100) if prev_close else 0,
     }
+
+
+def _match_group(metrics: dict[str, Any], group: dict[str, Any]) -> bool:
+    logic = (group.get("logic") or "AND").upper()
+    conds = group.get("conditions") or []
+    if not conds:
+        return True
+    results = [_eval_op(metrics.get(c["field"]), c["op"], c["value"]) for c in conds if metrics.get(c["field"]) is not None]
+    if not results:
+        return False
+    return any(results) if logic == "OR" else all(results)
+
+
+def _match_groups(metrics: dict[str, Any], groups: list[dict[str, Any]]) -> bool:
+    if not groups:
+        return True
+    return all(_match_group(metrics, g) for g in groups)
 
 
 def _match_conditions(metrics: dict[str, Any], conditions: list[dict]) -> bool:
@@ -199,6 +229,8 @@ class ScreenerService:
         preset_id: str | None = None,
         preset_ids: list[str] | None = None,
         conditions: list[dict] | None = None,
+        groups: list[dict[str, Any]] | None = None,
+        sort: list[dict[str, str]] | None = None,
         limit: int = 50,
         max_scan: int | None = None,
         include_chinext: bool = True,
@@ -206,6 +238,7 @@ class ScreenerService:
         include_bse: bool = True,
         exclude_st: bool = True,
         use_custom_pool: bool = False,
+        pool_scope: str = "filtered",
         prefer_local_cache: bool = True,
     ) -> Generator[dict[str, Any], None, None]:
         run_id = str(uuid.uuid4())
@@ -220,6 +253,7 @@ class ScreenerService:
             include_bse=include_bse,
             exclude_st=exclude_st,
             use_custom_pool=use_custom_pool,
+            pool_scope=pool_scope,
         )
         total = len(universe)
         results: list[dict[str, Any]] = []
@@ -254,6 +288,7 @@ class ScreenerService:
                 start_date,
                 end_date,
                 prefer_local_cache=prefer_local_cache,
+                groups=groups,
             )
             yield {"event": "scan_item", "run_id": run_id, **item}
             if item.get("matched") and item.get("hit"):
@@ -265,11 +300,28 @@ class ScreenerService:
                     "matched_total": len(results),
                 }
 
+        if sort:
+            for spec in reversed(sort):
+                field = spec.get("field", "return_20d")
+                reverse = (spec.get("direction") or "desc").lower() == "desc"
+
+                def _sort_key(x: dict) -> float:
+                    m = x.get("metrics") or {}
+                    try:
+                        return float(m.get(field) or 0)
+                    except (TypeError, ValueError):
+                        return 0.0
+
+                results.sort(key=_sort_key, reverse=reverse)
+        results = results[:limit] if limit else results
+
         payload = {
             "run_id": run_id,
             "preset_id": preset_entries[0][0] if len(preset_entries) == 1 else None,
             "preset_ids": [e[0] for e in preset_entries],
             "conditions": preset_entries[0][2] if len(preset_entries) == 1 else None,
+            "groups": groups,
+            "sort": sort,
             "preset_name": preset_name,
             "match_mode": "intersection",
             "results": results,
@@ -295,9 +347,13 @@ class ScreenerService:
         end_date: str,
         *,
         prefer_local_cache: bool,
+        groups: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         symbol = stock["symbol"]
         name = stock.get("name", "")
+        from app.services.data_store import read_daily_bars, records_from_daily_bars
+        from app.services.data_quality import assess_symbol
+
         base = {
             "symbol": symbol,
             "name": name,
@@ -307,13 +363,23 @@ class ScreenerService:
             "data_source": None,
         }
         try:
-            res = self.fetcher.get_stock_data(
-                symbol,
-                start_date,
-                end_date,
-                cache_only=prefer_local_cache,
-                quiet=True,
-            )
+
+            df = read_daily_bars(symbol=symbol, start_date=start_date, end_date=end_date)
+            if not df.empty and len(df) >= 30:
+                records = records_from_daily_bars(df)
+                res = {
+                    "success": True,
+                    "data": records,
+                    "metadata": {"data_source": "parquet", "cached": True},
+                }
+            else:
+                res = self.fetcher.get_stock_data(
+                    symbol,
+                    start_date,
+                    end_date,
+                    cache_only=prefer_local_cache,
+                    quiet=True,
+                )
         except Exception as e:
             base["message"] = str(e)
             return base
@@ -329,10 +395,16 @@ class ScreenerService:
         indicators = compute_indicators(records, ["ma", "macd", "rsi"])
         metrics = _extract_metrics(records, indicators)
         hit_ids = _match_preset_intersection(metrics, preset_entries)
+        if hit_ids and groups and not _match_groups(metrics, groups):
+            hit_ids = []
+        elif not hit_ids and groups and _match_groups(metrics, groups):
+            hit_ids = ["groups"]
         if hit_ids:
+            q = assess_symbol(symbol)
             hit = {
                 "symbol": symbol,
                 "name": name,
+                "quality_level": q.get("quality_level", "B"),
                 "metrics": {k: v for k, v in metrics.items() if v is not None},
                 "matched_presets": [
                     {"id": pid, "name": PRESETS[pid]["name"] if pid in PRESETS else pid}

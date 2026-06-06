@@ -111,6 +111,14 @@ class KlinesSyncService:
                     result = self.fetcher.sync_full_history(code, quiet=True)
 
                 self.registry.upsert_from_result(result)
+                if result.get("status") in ("ok", "skipped"):
+                    try:
+                        from app.services.curated_sync import ingest_symbol_from_pkl
+
+                        curated = ingest_symbol_from_pkl(code)
+                        result["curated"] = curated.get("status")
+                    except Exception:
+                        result["curated"] = "failed"
                 result["event"] = "klines_item"
                 result["current"] = idx
                 result["total"] = total

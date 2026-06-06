@@ -42,6 +42,36 @@ const router = createRouter({
           path: 'sync-scheduler',
           name: 'sync-scheduler',
           component: () => import('../views/SyncSchedulerView.vue')
+        },
+        {
+          path: 'data-quality',
+          name: 'data-quality',
+          component: () => import('../views/DataQualityView.vue')
+        },
+        {
+          path: 'backtests',
+          name: 'backtests',
+          component: () => import('../views/BacktestView.vue')
+        },
+        {
+          path: 'trade-plans',
+          name: 'trade-plans',
+          component: () => import('../views/TradePlansView.vue')
+        },
+        {
+          path: 'portfolio-sim',
+          name: 'portfolio-sim',
+          component: () => import('../views/PortfolioSimView.vue')
+        },
+        {
+          path: 'reviews',
+          name: 'reviews',
+          component: () => import('../views/ReviewCenterView.vue')
+        },
+        {
+          path: 'market',
+          name: 'market',
+          component: () => import('../views/MarketEnvironmentView.vue')
         }
       ]
     }

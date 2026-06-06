@@ -44,18 +44,18 @@ const items = computed(() => getBreadcrumb(route.path))
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  background: #fff;
+  background: #080a10;
   border-bottom: 1px solid var(--rb-border);
 }
 
 .rb-breadcrumb-bar :deep(.el-breadcrumb__inner),
 .rb-breadcrumb-bar :deep(.el-breadcrumb__item) {
   font-size: 14px;
-  color: var(--rb-text-mid);
+  color: var(--rb-text-mid) !important;
 }
 
 .rb-breadcrumb-bar :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
-  color: var(--rb-text-dark);
+  color: var(--rb-text-white) !important;
   font-weight: 600;
 }
 

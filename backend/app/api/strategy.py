@@ -19,6 +19,10 @@ class ReviseRequest(BaseModel):
     note: str = ""
 
 
+class EnableRequest(BaseModel):
+    enabled: bool
+
+
 @router.get("")
 async def list_strategies():
     store = get_strategy_store()
@@ -64,9 +68,26 @@ async def upload_strategy(file: UploadFile = File(...)):
 @router.post("/{strategy_id}/revise")
 async def revise_strategy(strategy_id: str, body: ReviseRequest):
     try:
-        return get_strategy_store().revise(strategy_id, body.params, body.note)
+        revised = get_strategy_store().revise(strategy_id, body.params, body.note)
+        revised["backtest_compare_required"] = True
+        return revised
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+
+
+@router.patch("/{strategy_id}/enabled")
+async def set_strategy_enabled(strategy_id: str, body: EnableRequest):
+    item = get_strategy_store().set_enabled(strategy_id, body.enabled)
+    if not item:
+        raise HTTPException(status_code=404, detail="策略不存在")
+    return item
+
+
+@router.get("/{strategy_id}/backtest-refs")
+async def strategy_backtest_refs(strategy_id: str, limit: int = 20):
+    return {"items": get_strategy_store().list_backtest_refs(strategy_id, limit)}
 
 
 @router.post("/{strategy_id}/run")

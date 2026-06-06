@@ -34,6 +34,12 @@ export const menuTree = [
     icon: 'Setting',
     children: [
       { index: '/sync-scheduler', title: '数据同步', route: '/sync-scheduler' },
+      { index: '/data-quality', title: '数据质量', route: '/data-quality' },
+      { index: '/market', title: '市场环境', route: '/market' },
+      { index: '/backtests', title: '回测中心', route: '/backtests' },
+      { index: '/trade-plans', title: '交易计划', route: '/trade-plans' },
+      { index: '/portfolio-sim', title: '模拟组合', route: '/portfolio-sim' },
+      { index: '/reviews', title: '复盘中心', route: '/reviews' },
       { index: '/settings', title: '系统设置', route: '/settings' }
     ]
   }
@@ -68,6 +74,30 @@ export const routeMeta = {
   '/sync-scheduler': {
     title: '数据同步',
     breadcrumb: [{ title: '系统管理' }, { title: '数据同步', path: '/sync-scheduler' }]
+  },
+  '/data-quality': {
+    title: '数据质量',
+    breadcrumb: [{ title: '系统管理' }, { title: '数据质量', path: '/data-quality' }]
+  },
+  '/market': {
+    title: '市场环境',
+    breadcrumb: [{ title: '系统管理' }, { title: '市场环境', path: '/market' }]
+  },
+  '/backtests': {
+    title: '回测中心',
+    breadcrumb: [{ title: '系统管理' }, { title: '回测中心', path: '/backtests' }]
+  },
+  '/trade-plans': {
+    title: '交易计划',
+    breadcrumb: [{ title: '系统管理' }, { title: '交易计划', path: '/trade-plans' }]
+  },
+  '/portfolio-sim': {
+    title: '模拟组合',
+    breadcrumb: [{ title: '系统管理' }, { title: '模拟组合', path: '/portfolio-sim' }]
+  },
+  '/reviews': {
+    title: '复盘中心',
+    breadcrumb: [{ title: '系统管理' }, { title: '复盘中心', path: '/reviews' }]
   }
 }
 

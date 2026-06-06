@@ -22,7 +22,19 @@ from app.services import pipeline_checkpoint as cp
 from app.services.interpretation import build_interpretation
 
 _RUNS: dict[str, dict[str, Any]] = {}
-STAGE_ORDER = ("ingest", "validate", "feature", "strategy", "predict", "direction", "present")
+STAGE_ORDER = (
+    "ingest",
+    "quality",
+    "market",
+    "validate",
+    "feature",
+    "strategy",
+    "predict",
+    "direction",
+    "plan",
+    "present",
+)
+DISCLAIMER = "分析结论仅供研究和复盘，不构成投资建议；系统不提供实盘交易能力。"
 
 
 class AnalysisPipeline:
@@ -172,6 +184,10 @@ class AnalysisPipeline:
         strategy_output = None
         directions = None
         forecasts = None
+        quality_info: dict[str, Any] | None = None
+        market_info: dict[str, Any] | None = None
+        plan_draft: dict[str, Any] | None = None
+        block_direction = False
 
         def emit_stage() -> dict[str, Any]:
             return {
@@ -230,34 +246,105 @@ class AnalysisPipeline:
 
         start_idx = STAGE_ORDER.index(start_at) if start_at in STAGE_ORDER else 0
 
-        # 1 ingest
-        if start_idx <= 0:
+        def _idx(stage: str) -> int:
+            return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 99
+
+        # ingest
+        if start_idx <= _idx("ingest"):
             log_stage("ingest", "采集", "running")
             yield emit_stage()
             end_date = datetime.now().strftime("%Y-%m-%d")
             start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-            result = self.fetcher.get_stock_data(symbol, start_date, end_date)
-            if not result.get("success"):
-                stage_logs[-1]["status"] = "failed"
-                stage_logs[-1]["detail"] = {"error": result.get("error"), **result.get("metadata", {})}
-                yield emit_stage()
-                yield from fail_and_return("ingest")
-                return
-            records = result["data"]
-            meta = result.get("metadata", {})
+            from app.services.data_store import read_daily_bars, records_from_daily_bars
+
+            df = read_daily_bars(symbol=symbol, start_date=start_date, end_date=end_date)
+
+            # 检查缓存是否新鲜：数据量足够 且 最后日期是今天
+            cache_is_fresh = False
+            last_date = None
+            days_stale = None
+            if not df.empty and len(df) >= 20:
+                last_date = df['trade_date'].max() if 'trade_date' in df.columns else None
+                if last_date:
+                    last_dt = datetime.strptime(str(last_date)[:10], "%Y-%m-%d") if isinstance(last_date, str) else last_date
+                    today_dt = datetime.now()
+                    days_stale = (today_dt - last_dt).days
+                    # 只有当天数据才算新鲜
+                    cache_is_fresh = days_stale == 0
+
+            if cache_is_fresh:
+                records = records_from_daily_bars(df)
+                meta = {"data_source": "parquet_cache", "cached": True, "rows": len(records), "last_date": str(last_date)[:10], "days_stale": days_stale}
+            else:
+                # 缓存为空、数据不足或数据过时，从数据源拉取
+                result = self.fetcher.get_stock_data(symbol, start_date, end_date)
+                if not result.get("success"):
+                    stage_logs[-1]["status"] = "failed"
+                    stage_logs[-1]["detail"] = {
+                        "error": result.get("error"),
+                        "cache_empty": df.empty,
+                        "cache_rows": len(df) if not df.empty else 0,
+                        "cache_stale": days_stale,
+                        "suggest_action": "数据源拉取失败，请检查股票代码是否正确或数据源是否可用",
+                        **result.get("metadata", {}),
+                    }
+                    yield emit_stage()
+                    yield from fail_and_return("ingest")
+                    return
+                records = result["data"]
+                meta = result.get("metadata", {})
+                # 成功拉取后保存到 parquet（如果 data_store 支持）
+                if records and len(records) >= 20:
+                    try:
+                        from app.services.data_store import save_daily_bars
+                        import pandas as pd
+                        save_df = pd.DataFrame(records)
+                        if 'timestamps' in save_df.columns:
+                            save_df['trade_date'] = pd.to_datetime(save_df['timestamps']).dt.strftime('%Y-%m-%d')
+                        save_df['symbol'] = symbol
+                        save_daily_bars(save_df)
+                        meta["saved_to_cache"] = True
+                    except Exception as save_err:
+                        meta["cache_save_error"] = str(save_err)
+
             stage_logs[-1]["status"] = "success"
             stage_logs[-1]["detail"] = {
                 "rows": len(records),
                 "data_source": meta.get("data_source"),
                 "cached": meta.get("cached", False),
                 "source_order": meta.get("source_order"),
+                "saved_to_cache": meta.get("saved_to_cache", False),
             }
             yield emit_stage()
 
         assert records is not None
 
-        # 2 validate
-        if start_idx <= 1:
+        if start_idx <= _idx("quality"):
+            log_stage("quality", "数据质量", "running")
+            yield emit_stage()
+            from app.services.data_quality import assess_symbol
+
+            quality_info = assess_symbol(symbol)
+            block_direction = quality_info.get("quality_level") == "D"
+            stage_logs[-1]["status"] = "success"
+            stage_logs[-1]["detail"] = quality_info
+            yield emit_stage()
+
+        if start_idx <= _idx("market"):
+            log_stage("market", "市场环境", "running")
+            yield emit_stage()
+            from app.services.market_env import compute_regime
+
+            market_info = compute_regime()
+            stage_logs[-1]["status"] = "success"
+            stage_logs[-1]["detail"] = {
+                "market_regime": market_info.get("market_regime"),
+                "score": market_info.get("score"),
+            }
+            yield emit_stage()
+
+        # validate
+        if start_idx <= _idx("validate"):
             log_stage("validate", "质检", "running")
             yield emit_stage()
             closes = [r.get("close") for r in records if r.get("close") is not None]
@@ -269,8 +356,8 @@ class AnalysisPipeline:
                 yield from fail_and_return("validate")
                 return
 
-        # 3 feature
-        if start_idx <= 2 and (indicators is None or price_levels is None):
+        # feature
+        if start_idx <= _idx("feature") and (indicators is None or price_levels is None):
             log_stage("feature", "特征", "running")
             yield emit_stage()
             indicators = compute_indicators(records, indicator_names)
@@ -286,8 +373,8 @@ class AnalysisPipeline:
             yield from fail_and_return("feature", {"error": "特征计算未完成"})
             return
 
-        # 4 strategy
-        if start_idx <= 3:
+        # strategy
+        if start_idx <= _idx("strategy"):
             log_stage("strategy", "策略", "running")
             yield emit_stage()
             store = get_strategy_store()
@@ -329,8 +416,8 @@ class AnalysisPipeline:
                 return
             yield emit_stage()
 
-        # 5 predict
-        if start_idx <= 4:
+        # predict
+        if start_idx <= _idx("predict"):
             log_stage("predict", "预测", "running")
             yield emit_stage()
             forecasts = {
@@ -341,20 +428,41 @@ class AnalysisPipeline:
             stage_logs[-1]["status"] = "success"
             yield emit_stage()
 
-        # 6 direction
-        if start_idx <= 5:
+        # direction
+        if start_idx <= _idx("direction"):
             log_stage("direction", "方向", "running")
             yield emit_stage()
-            directions = build_directions(records, indicators, price_levels)
-            stage_logs[-1]["status"] = "success"
-            stage_logs[-1]["detail"] = {
-                "short": directions["short"]["bias"] if directions.get("short") else None,
-                "medium": directions["medium"]["bias"] if directions.get("medium") else None,
-                "long": directions["long"]["bias"] if directions.get("long") else None,
-            }
+            if block_direction:
+                directions = {
+                    "short": {"bias": "blocked", "summary": "数据质量 D 级，不生成方向结论"},
+                    "medium": {"bias": "blocked", "summary": "数据质量 D 级，不生成方向结论"},
+                    "long": {"bias": "blocked", "summary": "数据质量 D 级，不生成方向结论"},
+                }
+                stage_logs[-1]["status"] = "success"
+                stage_logs[-1]["detail"] = {"blocked": True, "reason": quality_info}
+            else:
+                directions = build_directions(records, indicators, price_levels)
+                stage_logs[-1]["status"] = "success"
+                stage_logs[-1]["detail"] = {
+                    "short": directions["short"]["bias"] if directions.get("short") else None,
+                    "medium": directions["medium"]["bias"] if directions.get("medium") else None,
+                    "long": directions["long"]["bias"] if directions.get("long") else None,
+                }
             yield emit_stage()
 
-        # 7 present
+        if start_idx <= _idx("plan"):
+            log_stage("plan", "交易计划", "running")
+            yield emit_stage()
+            from app.services.trade_plans import build_plan_draft
+
+            plan_draft = build_plan_draft(
+                symbol, directions, price_levels, horizon=workflow.get("horizon", "medium") if workflow else "medium"
+            )
+            stage_logs[-1]["status"] = "success"
+            stage_logs[-1]["detail"] = plan_draft
+            yield emit_stage()
+
+        # present
         log_stage("present", "呈现", "success")
         yield emit_stage()
 
@@ -381,7 +489,14 @@ class AnalysisPipeline:
             "directions": directions,
             "forecasts": forecasts,
             "interpretation": interpretation,
-            "disclaimer": "分析结论仅供参考，不构成投资建议",
+            "quality": quality_info,
+            "market": market_info,
+            "plan_draft": plan_draft,
+            "lineage": {
+                "stages": [s["id"] for s in stage_logs],
+                "data_source": (meta or {}).get("data_source"),
+            },
+            "disclaimer": DISCLAIMER,
             "resumed": resumed,
         }
         self._save_run(payload)

@@ -166,10 +166,85 @@ def init_db() -> None:
                 started_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS backtest_runs (
+                run_id TEXT PRIMARY KEY,
+                name TEXT,
+                strategy_id TEXT,
+                filters_json TEXT,
+                config_json TEXT,
+                metrics_json TEXT,
+                result_path TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS trade_plans (
+                id TEXT PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                horizon TEXT NOT NULL,
+                trigger_price REAL,
+                invalid_price REAL,
+                target_price_1 REAL,
+                target_price_2 REAL,
+                max_position_pct REAL,
+                rationale_json TEXT,
+                risks_json TEXT,
+                status TEXT NOT NULL,
+                source_run_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS simulated_trades (
+                id TEXT PRIMARY KEY,
+                plan_id TEXT,
+                symbol TEXT NOT NULL,
+                side TEXT NOT NULL,
+                price REAL NOT NULL,
+                quantity REAL NOT NULL,
+                fee REAL DEFAULT 0,
+                traded_at TEXT NOT NULL,
+                note TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS reviews (
+                id TEXT PRIMARY KEY,
+                plan_id TEXT NOT NULL,
+                pnl REAL,
+                pnl_pct REAL,
+                tags_json TEXT,
+                lesson TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS strategy_backtest_refs (
+                id TEXT PRIMARY KEY,
+                strategy_id TEXT NOT NULL,
+                revision_id TEXT,
+                backtest_run_id TEXT NOT NULL,
+                metrics_json TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS screener_strategies (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                filters_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
+        _ensure_column(conn, "strategies", "enabled", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(conn, "trade_plans", "risk_reward_ratio", "REAL")
         _seed_workflows(conn)
         _seed_watchlist(conn)
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
 def _seed_watchlist(conn: sqlite3.Connection) -> None:
