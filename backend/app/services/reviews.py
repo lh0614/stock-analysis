@@ -80,11 +80,47 @@ def list_reviews(limit: int = 100) -> list[dict[str, Any]]:
 
 def get_stats() -> dict[str, Any]:
     with get_conn() as conn:
-        rows = conn.execute("SELECT tags_json, pnl FROM reviews").fetchall()
+        rows = conn.execute("SELECT tags_json, pnl, pnl_pct FROM reviews").fetchall()
     tag_counts: dict[str, int] = {}
+    pnl_by_tag: dict[str, float] = {}
+    loss_tag_counts: dict[str, int] = {}
     total_pnl = 0.0
+    pnl_pcts: list[float] = []
     for r in rows:
-        total_pnl += float(r["pnl"] or 0)
+        pnl = float(r["pnl"] or 0)
+        total_pnl += pnl
+        if r["pnl_pct"] is not None:
+            pnl_pcts.append(float(r["pnl_pct"]))
         for t in json.loads(r["tags_json"] or "[]"):
             tag_counts[t] = tag_counts.get(t, 0) + 1
-    return {"review_count": len(rows), "total_pnl": round(total_pnl, 2), "tag_counts": tag_counts}
+            pnl_by_tag[t] = pnl_by_tag.get(t, 0.0) + pnl
+            if pnl < 0:
+                loss_tag_counts[t] = loss_tag_counts.get(t, 0) + 1
+    deviation_tags = {
+        "late_stop_loss",
+        "ignored_market_regime",
+        "position_too_large",
+        "did_not_follow_plan",
+        "chased_high",
+    }
+    deviation_count = sum(tag_counts.get(t, 0) for t in deviation_tags)
+    suggestions = []
+    if loss_tag_counts.get("late_stop_loss"):
+        suggestions.append("止损执行偏差高，策略版本需强化失效条件与提醒。")
+    if loss_tag_counts.get("ignored_market_regime"):
+        suggestions.append("市场环境过滤失效，回测与实盘观察需按强/震荡/风险状态拆分。")
+    if loss_tag_counts.get("position_too_large"):
+        suggestions.append("仓位过大导致亏损，策略需降低单票上限或加入波动率仓位系数。")
+    if loss_tag_counts.get("signal_failed"):
+        suggestions.append("信号失败偏多，候选策略应降低同类因子权重或增加确认条件。")
+    return {
+        "review_count": len(rows),
+        "total_pnl": round(total_pnl, 2),
+        "avg_pnl_pct": round(sum(pnl_pcts) / len(pnl_pcts), 4) if pnl_pcts else 0,
+        "tag_counts": tag_counts,
+        "pnl_by_tag": {k: round(v, 2) for k, v in pnl_by_tag.items()},
+        "loss_tag_counts": loss_tag_counts,
+        "deviation_count": deviation_count,
+        "deviation_ratio": round(deviation_count / len(rows), 4) if rows else 0,
+        "strategy_revision_suggestions": suggestions,
+    }

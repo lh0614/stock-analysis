@@ -172,7 +172,7 @@ def recompute(symbols: list[str] | None = None) -> dict[str, Any]:
 
 def get_factor_catalog() -> list[dict[str, str]]:
     """返回因子目录 - PRD P0 技术与量价因子"""
-    return [
+    items = [
         # 均线因子
         {"name": "ma5", "description": "5 日均线", "category": "MA"},
         {"name": "ma10", "description": "10 日均线", "category": "MA"},
@@ -217,6 +217,37 @@ def get_factor_catalog() -> list[dict[str, str]]:
         # 价格位置因子
         {"name": "price_position_60d", "description": "60日价格分位", "category": "Position"},
     ]
+    formulas = {
+        "ma5": ("rolling_mean(close, 5)", "price"),
+        "ma10": ("rolling_mean(close, 10)", "price"),
+        "ma20": ("rolling_mean(close, 20)", "price"),
+        "ma60": ("rolling_mean(close, 60)", "price"),
+        "ma120": ("rolling_mean(close, 120)", "price"),
+        "ma250": ("rolling_mean(close, 250)", "price"),
+        "close_above_ma20": ("close > ma20 ? 1 : 0", "bool"),
+        "ma_bullish_alignment": ("close > ma5 > ma10 > ma20 > ma60 ? 1 : 0", "bool"),
+        "macd_dif": ("EMA(close,12) - EMA(close,26)", "value"),
+        "macd_dea": ("EMA(macd_dif,9)", "value"),
+        "macd_hist": ("2 * (macd_dif - macd_dea)", "value"),
+        "rsi6": ("RSI(close, 6)", "0-100"),
+        "rsi12": ("RSI(close, 12)", "0-100"),
+        "rsi24": ("RSI(close, 24)", "0-100"),
+        "return_1d": ("close / close[-1] - 1", "ratio"),
+        "return_5d": ("close / close[-5] - 1", "ratio"),
+        "return_20d": ("close / close[-20] - 1", "ratio"),
+        "return_60d": ("close / close[-60] - 1", "ratio"),
+        "volatility_20d": ("std(daily_return, 20) * sqrt(252)", "annualized_ratio"),
+        "volatility_60d": ("std(daily_return, 60) * sqrt(252)", "annualized_ratio"),
+        "volume_ratio_5_20": ("mean(volume,5) / mean(volume,20)", "ratio"),
+        "breakout_20d_high": ("close > max(high[-20:-1]) ? 1 : 0", "bool"),
+        "pullback_to_ma20": ("close > ma20 and recent_low near ma20", "bool"),
+        "price_position_60d": ("(close - min(close,60)) / (max(close,60) - min(close,60))", "0-1"),
+    }
+    for item in items:
+        formula, unit = formulas.get(item["name"], ("", ""))
+        item["formula"] = formula
+        item["unit"] = unit
+    return items
 
 
 def get_factors_for_symbol(symbol: str) -> dict[str, float]:
@@ -228,3 +259,79 @@ def get_factors_for_symbol(symbol: str) -> dict[str, float]:
         return {}
     sub = df[df["symbol"] == symbol.zfill(6)[:6]]
     return {str(r["factor_name"]): float(r["value"]) for _, r in sub.iterrows()}
+
+
+def evaluate_factor_effectiveness(
+    factor_name: str,
+    horizon: int = 20,
+    min_samples: int = 20,
+) -> dict[str, Any]:
+    """Evaluate a factor by cross-sectional IC/RankIC against forward returns."""
+    df = read_parquet(factors_path())
+    if df.empty:
+        return {"factor": factor_name, "status": "no_data", "samples": 0}
+    sub = df[df["factor_name"] == factor_name].copy()
+    if sub.empty:
+        return {"factor": factor_name, "status": "missing_factor", "samples": 0}
+
+    rows = []
+    for _, item in sub.iterrows():
+        symbol = str(item["symbol"]).zfill(6)[:6]
+        trade_date = str(item["trade_date"])[:10]
+        bars = read_daily_bars(symbol=symbol, start_date=trade_date)
+        if len(bars) <= horizon:
+            continue
+        close = bars["close"].astype(float).reset_index(drop=True)
+        entry = float(close.iloc[0])
+        exit_price = float(close.iloc[horizon])
+        if entry <= 0:
+            continue
+        rows.append(
+            {
+                "symbol": symbol,
+                "trade_date": trade_date,
+                "factor_value": float(item["value"]),
+                "forward_return": exit_price / entry - 1,
+            }
+        )
+    if len(rows) < min_samples:
+        return {"factor": factor_name, "status": "insufficient_samples", "samples": len(rows)}
+
+    out = pd.DataFrame(rows)
+    ic = float(out["factor_value"].corr(out["forward_return"], method="pearson") or 0)
+    rank_ic = float(out["factor_value"].corr(out["forward_return"], method="spearman") or 0)
+    quantiles = []
+    try:
+        out["bucket"] = pd.qcut(out["factor_value"], q=min(5, len(out)), duplicates="drop")
+        grouped = out.groupby("bucket", observed=True)["forward_return"].mean()
+        quantiles = [
+            {"bucket": str(bucket), "avg_forward_return": round(float(value), 4)}
+            for bucket, value in grouped.items()
+        ]
+    except Exception:
+        quantiles = []
+    degraded = abs(rank_ic) < 0.02
+    return {
+        "factor": factor_name,
+        "status": "degraded" if degraded else "effective",
+        "samples": len(rows),
+        "horizon": horizon,
+        "ic": round(ic, 4),
+        "rank_ic": round(rank_ic, 4),
+        "degraded": degraded,
+        "warning": "近期 RankIC 接近 0，因子可能衰减" if degraded else None,
+        "quantiles": quantiles,
+    }
+
+
+def monitor_factor_decay(factors: list[str] | None = None, horizon: int = 20) -> dict[str, Any]:
+    catalog = get_factor_catalog()
+    factor_names = factors or [item["name"] for item in catalog if item.get("unit") in {"ratio", "0-1", "0-100", "value"}]
+    results = [evaluate_factor_effectiveness(name, horizon=horizon) for name in factor_names[:30]]
+    alerts = [item for item in results if item.get("degraded")]
+    return {
+        "horizon": horizon,
+        "total": len(results),
+        "alerts": alerts,
+        "results": results,
+    }

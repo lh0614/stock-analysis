@@ -374,6 +374,16 @@ def run_strategy_backtest(
             symbols.append(getattr(c, "symbol", ""))
     symbols = [s for s in symbols if s]
 
+    # 生成数据质量摘要
+    from app.services.data_quality import get_quality_summary_for_symbols
+    data_quality_summary = get_quality_summary_for_symbols(symbols)
+
+    # 计算回测区间数据覆盖情况
+    backtest_days = (datetime.strptime(test_end_date, "%Y-%m-%d") -
+                     datetime.strptime(test_start_date, "%Y-%m-%d")).days
+    data_quality_summary["backtest_period_days"] = backtest_days
+    data_quality_summary["expected_trading_days"] = int(backtest_days * 0.7)  # 估算交易日
+
     result = _rolling_strategy_backtest(
         strategy_spec=strategy_spec,
         symbols=symbols,
@@ -391,6 +401,7 @@ def run_strategy_backtest(
         "trade_count": len(result.trades),
         "equity_curve": result.equity_curve,
         "trades": result.trades[:500],
+        "data_quality_summary": data_quality_summary,
         "created_at": datetime.now().isoformat(),
     }
 

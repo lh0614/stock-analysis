@@ -9,11 +9,47 @@ const intelligentScreenerApi = {
    * 解析自然语言选股要求
    * @param {string} text - 用户选股要求
    */
-  parseIntent(text, overrides = null) {
+  parseIntent(text, overrides = null, useLlm = true) {
     return request({
       url: '/api/v1/intents/parse',
       method: 'post',
-      data: { text, overrides }
+      data: { text, overrides, use_llm: useLlm }
+    })
+  },
+
+  clarifyIntent(text) {
+    return request({
+      url: '/api/v1/intents/clarify',
+      method: 'post',
+      data: { text }
+    })
+  },
+
+  generateStrategies(text, count = 4, useLlm = true) {
+    return request({
+      url: '/api/v1/intents/generate-strategies',
+      method: 'post',
+      data: { text, count, use_llm: useLlm }
+    })
+  },
+
+  validateSpec(strategySpec) {
+    return request({
+      url: '/api/v1/intents/validate-spec',
+      method: 'post',
+      data: { strategy_spec: strategySpec }
+    })
+  },
+
+  batchBacktest(strategySpecs, saveRecommended = false, topN = 2) {
+    return request({
+      url: '/api/v1/strategy-optimizer/batch-backtest',
+      method: 'post',
+      data: {
+        strategy_specs: strategySpecs,
+        save_recommended: saveRecommended,
+        top_n: topN
+      }
     })
   },
 

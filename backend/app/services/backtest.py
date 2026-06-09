@@ -12,6 +12,7 @@ import pandas as pd
 
 from app.core.data_paths import backtest_runs_dir, ensure_data_layout
 from app.core.db import get_conn, init_db
+from app.services.data_quality import get_quality_summary_for_symbols
 from app.services.data_store import read_daily_bars
 from app.services.market_env import compute_regime
 
@@ -243,12 +244,22 @@ def run_backtest(
 
     result_path = os.path.join(backtest_runs_dir(), f"{run_id}.json")
     os.makedirs(os.path.dirname(result_path), exist_ok=True)
+    data_quality_summary = get_quality_summary_for_symbols(symbols)
+    try:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        backtest_days = max(0, (end_dt - start_dt).days)
+        data_quality_summary["backtest_period_days"] = backtest_days
+        data_quality_summary["expected_trading_days"] = int(backtest_days * 0.7)
+    except ValueError:
+        pass
     payload = {
         "run_id": run_id,
         "name": name,
         "metrics": metrics,
         "equity_curve": equity_curve,
         "trades": trades,
+        "data_quality_summary": data_quality_summary,
         "config": {
             "symbols": symbols,
             "start_date": start_date,

@@ -1,8 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
 from typing import Optional
 
-from app.services.portfolio_sim import add_trade, list_trades, portfolio_summary
+from app.services.portfolio_sim import add_trade, import_trades_csv, list_trades, portfolio_summary
 
 router = APIRouter()
 
@@ -21,6 +21,12 @@ class SimTradeCreate(BaseModel):
 @router.post("/simulated-trades")
 async def post_simulated_trade(body: SimTradeCreate):
     return add_trade(body.model_dump())
+
+
+@router.post("/simulated-trades/import-csv")
+async def import_simulated_trades(file: UploadFile = File(...)):
+    content = (await file.read()).decode("utf-8-sig")
+    return import_trades_csv(content)
 
 
 @router.get("/simulated")

@@ -121,8 +121,54 @@ def get_breadth() -> dict[str, Any]:
 
 
 def get_sectors() -> list[dict[str, Any]]:
-    return [
-        {"name": "银行", "return_5d": 0.0, "return_20d": 0.0, "strength": "neutral"},
-        {"name": "白酒", "return_5d": 0.0, "return_20d": 0.0, "strength": "neutral"},
-        {"name": "新能源", "return_5d": 0.0, "return_20d": 0.0, "strength": "neutral"},
-    ]
+    """本地板块/行业强弱。
+
+    当前股票池若无行业字段，则使用 board 作为可验证分组，避免返回固定假数据。
+    """
+    from app.services.universe import get_universe_service
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in get_universe_service().query()[:800]:
+        name = item.get("industry") or item.get("sector") or item.get("board") or "未分组"
+        groups.setdefault(str(name), []).append(item)
+
+    rows: list[dict[str, Any]] = []
+    for name, items in groups.items():
+        returns_5d: list[float] = []
+        returns_20d: list[float] = []
+        ma20_bull = 0
+        sampled = 0
+        for item in items[:120]:
+            df = read_daily_bars(symbol=item["symbol"])
+            if len(df) < 22:
+                continue
+            close = df["close"].astype(float)
+            last = float(close.iloc[-1])
+            returns_5d.append(last / float(close.iloc[-6]) - 1 if len(close) > 6 else 0.0)
+            returns_20d.append(last / float(close.iloc[-21]) - 1)
+            if last > float(close.tail(20).mean()):
+                ma20_bull += 1
+            sampled += 1
+        if sampled == 0:
+            continue
+        ret5 = sum(returns_5d) / len(returns_5d) if returns_5d else 0.0
+        ret20 = sum(returns_20d) / len(returns_20d) if returns_20d else 0.0
+        bull_ratio = ma20_bull / sampled
+        if ret20 > 0.05 and bull_ratio >= 0.6:
+            strength = "strong"
+        elif ret20 < -0.05 or bull_ratio < 0.35:
+            strength = "weak"
+        else:
+            strength = "neutral"
+        rows.append(
+            {
+                "name": name,
+                "return_5d": round(ret5, 4),
+                "return_20d": round(ret20, 4),
+                "ma20_bull_ratio": round(bull_ratio, 2),
+                "sample_size": sampled,
+                "strength": strength,
+            }
+        )
+    rows.sort(key=lambda x: (x["return_20d"], x["ma20_bull_ratio"]), reverse=True)
+    return rows[:30]

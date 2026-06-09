@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.models.strategy_spec import StrategySpec, ScreenerResult
-from app.services.intelligent_screener import run_intelligent_screening
+from app.services.intelligent_screener import explain_symbol_against_strategy, run_intelligent_screening
 from app.services.strategy_backtest import run_in_sample_out_sample_backtest
 from app.services.strategy_rating import rate_strategy
 from app.services.strategy_library import (
@@ -24,6 +24,11 @@ class RunScreenerRequest(BaseModel):
 
 class BacktestRequest(BaseModel):
     save_as_strategy: bool = False
+
+
+class ExplainMissRequest(BaseModel):
+    symbol: str
+    strategy_spec: StrategySpec
 
 
 @router.post("/run", response_model=ScreenerResult)
@@ -50,6 +55,14 @@ async def run_screener(request: RunScreenerRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"选股执行失败: {str(e)}")
+
+
+@router.post("/explain-symbol")
+async def explain_symbol(request: ExplainMissRequest):
+    try:
+        return explain_symbol_against_strategy(request.symbol, request.strategy_spec)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"解释失败: {str(e)}")
 
 
 @router.post("/runs/{run_id}/backtest")

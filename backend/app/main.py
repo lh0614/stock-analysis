@@ -35,7 +35,11 @@ from app.api import (
     stock_analysis,
     strategy_optimizer,
     strategy_monitor,
+    strategy_cycle,
     intents,
+    prediction,
+    strategy_environment,
+    portfolio_risk,
 )
 from app.services.alerts import get_alert_service
 from app.services.sync_scheduler import get_sync_scheduler_service
@@ -293,7 +297,31 @@ app.include_router(
 )
 
 app.include_router(
+    strategy_cycle.router,
+    prefix=f"{settings.API_V1_STR}/strategy-cycle",
+    tags=["strategy-cycle"],
+)
+
+app.include_router(
     intents.router,
     prefix=f"{settings.API_V1_STR}/intents",
     tags=["intents"],
+)
+
+app.include_router(
+    prediction.router,
+    prefix=f"{settings.API_V1_STR}/prediction",
+    tags=["prediction"],
+)
+
+app.include_router(
+    strategy_environment.router,
+    prefix=f"{settings.API_V1_STR}/strategy-environment",
+    tags=["strategy-environment"],
+)
+
+app.include_router(
+    portfolio_risk.router,
+    prefix=f"{settings.API_V1_STR}/portfolio-risk",
+    tags=["portfolio-risk"],
 )

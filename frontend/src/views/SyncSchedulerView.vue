@@ -138,6 +138,97 @@
             <el-descriptions-item label="质量冲突数">{{ qualitySummary.conflicts || 0 }}</el-descriptions-item>
           </el-descriptions>
 
+          <el-divider />
+          <div class="rb-page-header cycle-header">
+            <span>策略自进化闭环</span>
+            <div>
+              <el-button link type="primary" :loading="cycleLoading" @click="loadCycleStatus()">刷新</el-button>
+              <el-button
+                size="small"
+                type="primary"
+                :loading="cycleTriggering"
+                :disabled="cycleStatus.is_running"
+                @click="triggerStrategyCycle"
+              >
+                手动执行闭环
+              </el-button>
+            </div>
+          </div>
+
+          <el-descriptions :column="2" border size="small" class="cycle-summary">
+            <el-descriptions-item label="当前状态">
+              <el-tag v-if="cycleStatus.is_running" type="warning">运行中</el-tag>
+              <el-tag
+                v-else-if="cycleStatus.latest_run?.status"
+                :type="cycleStatusType(cycleStatus.latest_run.status)"
+              >
+                {{ cycleStatusLabel(cycleStatus.latest_run.status) }}
+              </el-tag>
+              <span v-else class="muted">暂无记录</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="最近触发">
+              {{ cycleTriggerLabel(cycleStatus.latest_run?.trigger_type) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="最近开始">
+              {{ formatTime(cycleStatus.latest_run?.started_at) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="最近结束">
+              {{ formatTime(cycleStatus.latest_run?.finished_at) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="策略数">
+              {{ cycleStatus.latest_run?.total_strategies || 0 }}
+            </el-descriptions-item>
+            <el-descriptions-item label="优化任务">
+              {{ cycleStatus.latest_run?.optimization_jobs || 0 }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="cycleStatus.latest_run?.error" label="最近错误" :span="2">
+              <span class="error-text">{{ cycleStatus.latest_run.error }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <div v-if="cycleStatus.is_running && cycleStatus.progress" class="progress-panel">
+            <p class="progress-phase">
+              当前阶段：<strong>{{ strategyCyclePhaseLabel(cycleStatus.progress.phase) }}</strong>
+            </p>
+            <p v-if="cycleStatus.progress.message" class="progress-msg">{{ cycleStatus.progress.message }}</p>
+            <p v-if="cycleStatus.progress.sub_phase" class="progress-symbol">
+              子阶段：{{ cycleStatus.progress.sub_phase }}
+            </p>
+            <el-progress
+              v-if="cycleProgressPercent != null"
+              :percentage="cycleProgressPercent"
+              :format="cycleProgressBarFormat"
+              style="margin-top: 8px"
+            />
+          </div>
+
+          <el-table
+            v-if="cycleHistory.length"
+            :data="cycleHistory"
+            size="small"
+            stripe
+            max-height="180"
+            class="cycle-history"
+          >
+            <el-table-column prop="started_at" label="开始时间" width="150">
+              <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
+            </el-table-column>
+            <el-table-column prop="trigger_type" label="触发" width="80">
+              <template #default="{ row }">{{ cycleTriggerLabel(row.trigger_type) }}</template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="90">
+              <template #default="{ row }">
+                <el-tag size="small" :type="cycleStatusType(row.status)">
+                  {{ cycleStatusLabel(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="total_strategies" label="策略" width="70" />
+            <el-table-column prop="signal_runs" label="信号" width="70" />
+            <el-table-column prop="health_checks" label="健康" width="70" />
+            <el-table-column prop="optimization_jobs" label="优化" width="70" />
+          </el-table>
+
           <el-alert
             title="选股器页面的手动同步按钮仍然可用；本页用于定时任务与统一状态查看。"
             type="info"
@@ -154,6 +245,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
 import syncSchedulerApi from '@/api/syncScheduler.js'
 import dataApi from '@/api/data.js'
 import qualityApi from '@/api/quality.js'
@@ -169,6 +261,10 @@ const scope = ref('all')
 const dataStatus = ref({})
 const qualitySummary = ref({})
 const stageProgress = ref({ raw: "wait", klines: "wait", curated: "wait", quality: "wait", factors: "wait" })
+const cycleStatus = ref({ is_running: false, progress: null, latest_run: null })
+const cycleHistory = ref([])
+const cycleLoading = ref(false)
+const cycleTriggering = ref(false)
 
 const form = ref({
   enabled: false,
@@ -226,6 +322,12 @@ const progressMessage = computed(() => {
   return msg && String(msg) !== 'undefined' ? msg : ''
 })
 
+const cycleProgressPercent = computed(() => {
+  const p = cycleStatus.value.progress
+  if (!p || p.current == null || p.total == null || p.total <= 0) return null
+  return Math.min(100, Math.round((p.current / p.total) * 100))
+})
+
 function syncModeLabel(mode) {
   if (mode === 'full') return '全量'
   if (mode === 'incremental') return '增量'
@@ -236,6 +338,33 @@ function triggerLabel(t) {
   if (t === 'scheduled') return '定时'
   if (t === 'manual') return '手动'
   return t || '—'
+}
+
+function cycleTriggerLabel(t) {
+  if (t === 'scheduled') return '定时'
+  if (t === 'manual') return '手动'
+  if (t === 'auto') return '同步后'
+  return t || '—'
+}
+
+function cycleStatusLabel(s) {
+  const map = { running: '运行中', completed: '完成', failed: '失败' }
+  return map[s] || s || '—'
+}
+
+function cycleStatusType(s) {
+  const map = { running: 'warning', completed: 'success', failed: 'danger' }
+  return map[s] || 'info'
+}
+
+function strategyCyclePhaseLabel(phase) {
+  const map = { backfill: '回填收益', processing: '策略处理' }
+  return map[phase] || phase || '—'
+}
+
+function cycleProgressBarFormat() {
+  const p = cycleStatus.value.progress
+  return p ? `${p.current}/${p.total}` : ''
 }
 
 function formatTime(iso) {
@@ -277,11 +406,30 @@ function startPolling() {
     try {
       const data = await syncSchedulerApi.status()
       applyStatus(data)
-      if (!data.running) stopPolling()
+      await loadCycleStatus(false)
+      if (!data.running && !cycleStatus.value.is_running) stopPolling()
     } catch {
       /* ignore poll errors */
     }
   }, 2000)
+}
+
+async function loadCycleStatus(showLoading = true) {
+  if (showLoading) cycleLoading.value = true
+  try {
+    const [statusRes, historyRes] = await Promise.all([
+      axios.get('/api/v1/strategy-cycle/status'),
+      axios.get('/api/v1/strategy-cycle/history', { params: { limit: 8 } })
+    ])
+    cycleStatus.value = statusRes.data || { is_running: false, progress: null, latest_run: null }
+    cycleHistory.value = historyRes.data?.runs || []
+  } catch (e) {
+    if (showLoading) {
+      ElMessage.error(e.response?.data?.detail || e.message || '加载策略闭环状态失败')
+    }
+  } finally {
+    if (showLoading) cycleLoading.value = false
+  }
 }
 
 async function refreshStatus() {
@@ -295,7 +443,8 @@ async function refreshStatus() {
     const cv = await dataApi.coverage()
     dataStatus.value = { ...dataStatus.value, ...(cv || {}) }
     qualitySummary.value = await qualityApi.summary()
-    if (data.running) startPolling()
+    await loadCycleStatus(false)
+    if (data.running || cycleStatus.value.is_running) startPolling()
   } catch (e) {
     statusLoadError.value = true
     statusLoadErrorMessage.value =
@@ -303,6 +452,22 @@ async function refreshStatus() {
     ElMessage.error(e.response?.data?.detail || e.message || '加载状态失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function triggerStrategyCycle() {
+  cycleTriggering.value = true
+  try {
+    const res = await axios.post('/api/v1/strategy-cycle/trigger', {
+      trigger_type: 'manual'
+    })
+    ElMessage.success(res.data?.message || '策略闭环已启动')
+    await loadCycleStatus(false)
+    startPolling()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '触发策略闭环失败')
+  } finally {
+    cycleTriggering.value = false
   }
 }
 
@@ -394,6 +559,19 @@ onUnmounted(() => {
 .hint-alert {
   margin-top: 16px;
 }
+
+.cycle-header {
+  margin-bottom: 12px;
+}
+
+.cycle-summary {
+  margin-bottom: 12px;
+}
+
+.cycle-history {
+  margin-top: 12px;
+}
+
 .error-text {
   color: var(--el-color-danger);
 }

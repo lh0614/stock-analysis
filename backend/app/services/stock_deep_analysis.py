@@ -10,6 +10,8 @@ import numpy as np
 
 from app.services.data_quality import get_symbol_quality
 from app.services.factors import get_factors_for_symbol
+from app.services.data_store import read_parquet
+from app.core.data_paths import factors_path
 
 
 class EvidenceItem(BaseModel):
@@ -97,6 +99,51 @@ class StockAnalysisResult(BaseModel):
 
     # 策略匹配
     strategy_matches: List[str] = Field(default_factory=list, description="匹配的策略ID")
+
+
+SIMILAR_FACTOR_KEYS = [
+    "return_5d",
+    "return_20d",
+    "volatility_20d",
+    "rsi12",
+    "volume_ratio_5_20",
+    "price_position_60d",
+]
+
+
+def find_similar_cases(symbol: str, factors: Dict[str, Any], limit: int = 5) -> List[SimilarCase]:
+    df = read_parquet(factors_path())
+    if df.empty:
+        return []
+    pivot = df.pivot_table(
+        index=["symbol", "trade_date"],
+        columns="factor_name",
+        values="value",
+        aggfunc="last",
+    ).reset_index()
+    if pivot.empty:
+        return []
+    latest = pivot.sort_values("trade_date").groupby("symbol").tail(1)
+    target = np.array([float(factors.get(k) or 0) for k in SIMILAR_FACTOR_KEYS], dtype=float)
+    rows = []
+    for _, row in latest.iterrows():
+        sym = str(row.get("symbol")).zfill(6)[:6]
+        if sym == symbol.zfill(6)[:6]:
+            continue
+        values = np.array([float(row.get(k) or 0) for k in SIMILAR_FACTOR_KEYS], dtype=float)
+        dist = float(np.linalg.norm(target - values))
+        similarity = 1 / (1 + dist)
+        rows.append(
+            SimilarCase(
+                date=str(row.get("trade_date"))[:10],
+                symbol=sym,
+                similarity=round(similarity, 4),
+                subsequent_return_5d=None,
+                subsequent_return_20d=None,
+            )
+        )
+    rows.sort(key=lambda item: item.similarity, reverse=True)
+    return rows[:limit]
 
     # 市场环境
     market_environment: Optional[str] = Field(None, description="市场环境")
@@ -641,6 +688,6 @@ async def run_deep_analysis(symbol: str, name: str = "") -> StockAnalysisResult:
         contradictions=contradictions,
         data_quality=quality_info,
         risks=risks,
-        similar_cases=[],  # TODO: 实现相似案例匹配
+        similar_cases=find_similar_cases(symbol, factors),
         strategy_matches=[]  # TODO: 实现策略匹配
     )

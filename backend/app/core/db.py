@@ -236,6 +236,7 @@ def init_db() -> None:
             """
         )
         _ensure_column(conn, "strategies", "enabled", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(conn, "alerts", "payload_json", "TEXT")
         _ensure_column(conn, "trade_plans", "risk_reward_ratio", "REAL")
         _seed_workflows(conn)
         _seed_watchlist(conn)

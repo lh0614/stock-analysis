@@ -28,6 +28,23 @@
         </el-card>
       </el-col>
     </el-row>
+    <el-card shadow="never" style="margin-top: 12px">
+      <template #header>板块强弱</template>
+      <el-table :data="sectors" size="small">
+        <el-table-column prop="name" label="分组" min-width="120" />
+        <el-table-column prop="return_5d" label="5日收益" width="110">
+          <template #default="{ row }">{{ formatPercent(row.return_5d) }}</template>
+        </el-table-column>
+        <el-table-column prop="return_20d" label="20日收益" width="110">
+          <template #default="{ row }">{{ formatPercent(row.return_20d) }}</template>
+        </el-table-column>
+        <el-table-column prop="ma20_bull_ratio" label="MA20强势占比" width="130">
+          <template #default="{ row }">{{ formatPercent(row.ma20_bull_ratio) }}</template>
+        </el-table-column>
+        <el-table-column prop="sample_size" label="样本" width="80" />
+        <el-table-column prop="strength" label="强弱" width="100" />
+      </el-table>
+    </el-card>
   </div>
 </template>
 
@@ -40,12 +57,20 @@ import marketApi from '@/api/market'
 const regime = ref({})
 const indices = ref([])
 const breadth = ref({})
+const sectors = ref([])
+
+function formatPercent(value) {
+  if (value == null || Number.isNaN(Number(value))) return '-'
+  return `${(Number(value) * 100).toFixed(2)}%`
+}
 
 async function load() {
   regime.value = await marketApi.regime()
   const idx = await marketApi.indices()
   indices.value = idx.indices || []
   breadth.value = await marketApi.breadth()
+  const sectorData = await marketApi.sectors()
+  sectors.value = sectorData.sectors || []
 }
 
 onMounted(load)

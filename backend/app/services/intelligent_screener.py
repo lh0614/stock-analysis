@@ -14,7 +14,7 @@ from app.models.strategy_spec import (
     ScreenerResult,
     StrategySpec,
 )
-from app.services.data_quality import get_symbol_quality
+from app.services.data_quality import get_symbol_quality, get_quality_summary_for_symbols
 from app.services.data_store import read_parquet
 from app.services.universe import get_universe_service
 from app.core.data_paths import factors_path
@@ -235,9 +235,14 @@ def run_intelligent_screening(spec: StrategySpec) -> ScreenerResult:
     max_return = spec.position.max_positions * 3  # 返回3倍持仓数量
     candidates = candidates[:max_return]
 
+    # 6. 生成数据质量摘要
+    candidate_symbols = [c.symbol for c in candidates]
+    data_quality_summary = get_quality_summary_for_symbols(candidate_symbols)
+
     execution_time_ms = (time.time() - start_time) * 1000
 
     print(f"选股完成：扫描 {total_scanned} 只，命中 {len(candidates)} 只，耗时 {execution_time_ms:.0f}ms")
+    print(f"数据质量：{data_quality_summary['quality_grade']} - {data_quality_summary['recommendation']}")
 
     return ScreenerResult(
         run_id=run_id,
@@ -246,4 +251,59 @@ def run_intelligent_screening(spec: StrategySpec) -> ScreenerResult:
         total_scanned=total_scanned,
         total_matched=len(candidates),
         execution_time_ms=execution_time_ms,
+        data_quality_summary=data_quality_summary,
     )
+
+
+def explain_symbol_against_strategy(symbol: str, spec: StrategySpec) -> dict[str, Any]:
+    code = symbol.zfill(6)[:6]
+    factors_df = _load_factors([code])
+    if factors_df.empty:
+        return {
+            "symbol": code,
+            "matched": False,
+            "reason": "缺少因子数据",
+            "failed_conditions": [],
+            "matched_conditions": [],
+            "factor_values": {},
+        }
+    factor_values = factors_df.iloc[0].to_dict()
+    factor_values.pop("symbol", None)
+    factor_values.pop("trade_date", None)
+    matched_conditions = []
+    failed_conditions = []
+    for cond in spec.entry_conditions:
+        value = factor_values.get(cond.factor)
+        met = _eval_condition(value, cond)
+        item = {
+            "factor": cond.factor,
+            "value": value,
+            "op": cond.op,
+            "target": cond.value,
+            "met": met,
+        }
+        if met:
+            matched_conditions.append(item)
+        else:
+            failed_conditions.append({**item, "reason": "因子不满足条件" if value is not None else "缺少该因子"})
+    quality = get_symbol_quality(code)
+    quality_met = quality["quality_level"] in spec.risk_filters.quality_level
+    if not quality_met:
+        failed_conditions.append(
+            {
+                "factor": "data_quality",
+                "value": quality["quality_level"],
+                "op": "in",
+                "target": spec.risk_filters.quality_level,
+                "met": False,
+                "reason": "数据质量不在策略允许范围",
+            }
+        )
+    return {
+        "symbol": code,
+        "matched": not failed_conditions,
+        "matched_conditions": matched_conditions,
+        "failed_conditions": failed_conditions,
+        "factor_values": factor_values,
+        "quality": quality,
+    }

@@ -23,6 +23,21 @@
               <el-button :loading="parsingIntent" @click="parseIntent">
                 解析要求
               </el-button>
+              <el-button type="primary" plain :loading="generatingStrategies" @click="generateCandidateStrategies">
+                生成候选策略
+              </el-button>
+              <el-button
+                v-if="generatedStrategies.length"
+                type="success"
+                plain
+                :loading="batchBacktestLoading"
+                @click="batchBacktestCandidates(false)"
+              >
+                批量回测排行
+              </el-button>
+              <el-tag v-if="parserLabel" size="small" :type="parserTagType">
+                {{ parserLabel }}
+              </el-tag>
               <span v-if="parsedWarning" class="intent-warning">{{ parsedWarning }}</span>
             </div>
           </div>
@@ -169,6 +184,111 @@
       </el-form>
     </el-card>
 
+    <el-card v-if="generatedStrategies.length" shadow="never" class="rb-card result-card">
+      <template #header>
+        <div class="rb-page-header">
+          <span>P1 候选策略</span>
+          <div>
+            <el-button
+              size="small"
+              type="success"
+              :loading="batchBacktestLoading"
+              @click="batchBacktestCandidates(true)"
+            >
+              回测并保存推荐
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <el-alert
+        v-if="clarification?.need_clarification"
+        :title="`建议补充：${clarification.questions.join('；')}`"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="intent-warning-alert"
+      />
+
+      <el-table :data="generatedStrategies" stripe>
+        <el-table-column prop="name" label="策略名称" min-width="180" />
+        <el-table-column prop="horizon" label="周期" width="80">
+          <template #default="{ row }">{{ getHorizonLabel(row.horizon) }}</template>
+        </el-table-column>
+        <el-table-column label="入场条件" min-width="260">
+          <template #default="{ row }">
+            <el-tag
+              v-for="cond in row.entry_conditions?.slice(0, 4)"
+              :key="`${row.name}-${cond.factor}-${cond.op}`"
+              size="small"
+              class="condition-chip"
+            >
+              {{ cond.factor }} {{ cond.op }} {{ formatValue(cond.value) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" link type="primary" @click="applyStrategySpec(row)">套用</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-card v-if="batchRanking.length" shadow="never" class="rb-card result-card">
+      <template #header>
+        <div class="rb-page-header">
+          <span>P1 批量回测排行榜</span>
+          <div class="result-meta">
+            <span>候选 {{ batchBacktestResult?.total || 0 }} 个</span>
+            <span>推荐 {{ batchBacktestResult?.recommended?.length || 0 }} 个</span>
+          </div>
+        </div>
+      </template>
+
+      <el-table :data="batchRanking" stripe>
+        <el-table-column prop="name" label="策略名称" min-width="180" />
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getResearchStatusType(row.status)">{{ getResearchStatusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="score" label="研究分" width="90" />
+        <el-table-column label="评级" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.rating?.rating" :type="getRatingType(row.rating.rating)">
+              {{ row.rating.rating }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="样本外年化" width="120">
+          <template #default="{ row }">{{ formatPercent(row.metrics?.out_sample_annual_return) }}</template>
+        </el-table-column>
+        <el-table-column label="样本外夏普" width="110">
+          <template #default="{ row }">{{ row.metrics?.out_sample_sharpe?.toFixed?.(2) ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column label="最大回撤" width="110">
+          <template #default="{ row }">{{ formatPercent(row.metrics?.out_sample_max_drawdown) }}</template>
+        </el-table-column>
+        <el-table-column label="数据质量" width="90">
+          <template #default="{ row }">
+            <el-tag v-if="row.data_quality?.quality_grade" :type="getQualityType(row.data_quality.quality_grade)">
+              {{ row.data_quality.quality_grade }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="reason" label="筛选原因" min-width="220" />
+        <el-table-column label="保存结果" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.saved_strategy_id" type="success" size="small">{{ row.saved_strategy_id }}</el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- 选股结果 -->
     <el-card v-if="result" shadow="never" class="rb-card result-card">
       <template #header>
@@ -181,6 +301,13 @@
           </div>
         </div>
       </template>
+
+      <DataQualityCard
+        v-if="result.data_quality_summary"
+        :quality-summary="result.data_quality_summary"
+        show-details
+        class="quality-card-inline"
+      />
 
       <el-table :data="result.candidates" stripe>
         <el-table-column prop="rank" label="排名" width="80" />
@@ -246,6 +373,23 @@
         </template>
       </el-alert>
 
+      <el-row :gutter="20" class="quality-row">
+        <el-col :xs="24" :md="12">
+          <DataQualityCard
+            v-if="backtestResult.in_sample?.data_quality_summary"
+            :quality-summary="backtestResult.in_sample.data_quality_summary"
+            show-details
+          />
+        </el-col>
+        <el-col :xs="24" :md="12">
+          <DataQualityCard
+            v-if="backtestResult.out_sample?.data_quality_summary"
+            :quality-summary="backtestResult.out_sample.data_quality_summary"
+            show-details
+          />
+        </el-col>
+      </el-row>
+
       <el-row :gutter="20">
         <el-col :span="12">
           <el-card shadow="never" header="样本内表现">
@@ -267,6 +411,15 @@
               </el-descriptions-item>
               <el-descriptions-item label="交易次数">
                 {{ backtestResult.in_sample.metrics.total_trades }}
+              </el-descriptions-item>
+              <el-descriptions-item label="跳过交易">
+                {{ backtestResult.in_sample.metrics.skipped_trade_count || 0 }}
+              </el-descriptions-item>
+              <el-descriptions-item label="基准收益">
+                {{ formatPercent(backtestResult.in_sample.metrics.benchmark_return) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="滑点">
+                {{ formatPercent(backtestResult.in_sample.metrics.costs?.slippage) }}
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -293,6 +446,15 @@
               <el-descriptions-item label="交易次数">
                 {{ backtestResult.out_sample.metrics.total_trades }}
               </el-descriptions-item>
+              <el-descriptions-item label="跳过交易">
+                {{ backtestResult.out_sample.metrics.skipped_trade_count || 0 }}
+              </el-descriptions-item>
+              <el-descriptions-item label="基准收益">
+                {{ formatPercent(backtestResult.out_sample.metrics.benchmark_return) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="滑点">
+                {{ formatPercent(backtestResult.out_sample.metrics.costs?.slippage) }}
+              </el-descriptions-item>
             </el-descriptions>
           </el-card>
         </el-col>
@@ -317,16 +479,25 @@ import { ElMessage } from 'element-plus'
 import { Search, Histogram } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import intelligentScreenerApi from '@/api/intelligentScreener'
+import DataQualityCard from '@/components/DataQualityCard.vue'
 
 const router = useRouter()
 const loading = ref(false)
 const backtestLoading = ref(false)
 const parsingIntent = ref(false)
+const generatingStrategies = ref(false)
+const batchBacktestLoading = ref(false)
 const result = ref(null)
 const backtestResult = ref(null)
 const rating = ref(null)
+const generatedStrategies = ref([])
+const batchBacktestResult = ref(null)
+const batchRanking = ref([])
+const clarification = ref(null)
 const intentText = ref('')
 const parsedWarning = ref('')
+const parserLabel = ref('')
+const parserTagType = ref('info')
 
 const form = reactive({
   name: '',
@@ -370,7 +541,12 @@ function resetForm() {
   result.value = null
   backtestResult.value = null
   rating.value = null
+  generatedStrategies.value = []
+  batchBacktestResult.value = null
+  batchRanking.value = []
+  clarification.value = null
   parsedWarning.value = ''
+  parserLabel.value = ''
 }
 
 async function parseIntent() {
@@ -390,12 +566,72 @@ async function parseIntent() {
     form.conditions = (spec.entry_conditions || []).map((c) => ({ ...c }))
     form.ranking = (spec.ranking || []).map((r) => ({ ...r }))
     parsedWarning.value = data.warnings?.[0] || ''
+    parserLabel.value = data.parser === 'deepseek' ? 'DeepSeek 解析' : data.fallback_used ? '规则兜底' : '规则解析'
+    parserTagType.value = data.parser === 'deepseek' ? 'success' : data.fallback_used ? 'warning' : 'info'
+    applyStrategySpec(spec)
     ElMessage.success('已解析为可执行策略条件，可继续调整后运行')
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || error.message || '解析失败')
   } finally {
     parsingIntent.value = false
   }
+}
+
+async function generateCandidateStrategies() {
+  if (!intentText.value.trim()) {
+    ElMessage.warning('请输入策略目标')
+    return
+  }
+  generatingStrategies.value = true
+  batchBacktestResult.value = null
+  batchRanking.value = []
+  try {
+    const data = await intelligentScreenerApi.generateStrategies(intentText.value.trim(), 4)
+    generatedStrategies.value = data.strategies || []
+    clarification.value = data.clarification || null
+    parserLabel.value = data.parser === 'deepseek' ? 'DeepSeek 候选生成' : '规则候选生成'
+    parserTagType.value = data.parser === 'deepseek' ? 'success' : 'info'
+    if (data.warnings?.length) {
+      parsedWarning.value = data.warnings[0]
+    }
+    if (generatedStrategies.value.length) {
+      applyStrategySpec(generatedStrategies.value[0])
+    }
+    ElMessage.success(`已生成 ${generatedStrategies.value.length} 个可执行候选策略`)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || error.message || '生成候选策略失败')
+  } finally {
+    generatingStrategies.value = false
+  }
+}
+
+async function batchBacktestCandidates(saveRecommended = false) {
+  if (!generatedStrategies.value.length) {
+    ElMessage.warning('请先生成候选策略')
+    return
+  }
+  batchBacktestLoading.value = true
+  try {
+    const data = await intelligentScreenerApi.batchBacktest(generatedStrategies.value, saveRecommended, 2)
+    batchBacktestResult.value = data
+    batchRanking.value = data.ranked || []
+    const saved = data.saved_strategy_ids?.length || 0
+    ElMessage.success(saveRecommended ? `批量回测完成，已保存 ${saved} 个推荐策略` : '批量回测完成')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || error.message || '批量回测失败')
+  } finally {
+    batchBacktestLoading.value = false
+  }
+}
+
+function applyStrategySpec(spec) {
+  if (!spec) return
+  form.name = spec.name || form.name
+  form.horizon = spec.horizon || 'medium'
+  form.boards = spec.universe?.boards || ['main', 'chinext', 'star']
+  form.exclude_st = spec.universe?.exclude_st ?? true
+  form.conditions = (spec.entry_conditions || []).map((c) => ({ ...c }))
+  form.ranking = (spec.ranking || []).map((r) => ({ ...r }))
 }
 
 async function runAndBacktest() {
@@ -544,6 +780,38 @@ function getRatingAlertType(rating) {
   if (rating === 'C') return 'warning'
   return 'error'
 }
+
+function getHorizonLabel(horizon) {
+  const map = { short: '短线', medium: '中线', long: '长线' }
+  return map[horizon] || horizon || '-'
+}
+
+function getResearchStatusLabel(status) {
+  const map = {
+    qualified: '入围',
+    filtered: '过滤',
+    rejected: '拒绝',
+    invalid: '无效',
+    error: '错误'
+  }
+  return map[status] || status || '-'
+}
+
+function getResearchStatusType(status) {
+  const map = {
+    qualified: 'success',
+    filtered: 'warning',
+    rejected: 'info',
+    invalid: 'danger',
+    error: 'danger'
+  }
+  return map[status] || 'info'
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) return '-'
+  return `${(Number(value) * 100).toFixed(2)}%`
+}
 </script>
 
 <style scoped>
@@ -575,6 +843,20 @@ function getRatingAlertType(rating) {
 
 .result-meta span:first-child {
   border-left: none;
+}
+
+.quality-card-inline,
+.quality-row {
+  margin-bottom: 16px;
+}
+
+.intent-warning-alert {
+  margin-bottom: 12px;
+}
+
+.condition-chip {
+  margin-right: 6px;
+  margin-bottom: 4px;
 }
 
 .matched-conditions {

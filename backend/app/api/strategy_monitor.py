@@ -16,12 +16,12 @@ from app.services.strategy_monitor import (
     MonitoringReport
 )
 from app.models.strategy_spec import StrategySpec
-from app.services.strategy_library import get_strategy, list_strategy_signals
+from app.services.strategy_library import get_strategy, list_strategies, list_strategy_signals
 
 router = APIRouter()
 
 
-@router.get("/health", response_model=MonitoringReport)
+@router.get("/health")
 async def get_all_strategies_health():
     """
     获取所有活跃策略的健康度
@@ -33,18 +33,93 @@ async def get_all_strategies_health():
         raise HTTPException(status_code=500, detail=f"获取健康度失败: {str(e)}")
 
 
-@router.get("/strategies/{strategy_id}", response_model=StrategyHealth)
-async def get_strategy_health_status(strategy_id: str):
+@router.get("/strategies")
+async def get_strategies_health_overview(status: str = "active", limit: int = 100):
     """
-    获取单个策略的健康度
+    获取策略健康度概览列表。
+
+    默认只读取活跃策略；传 status=all 可读取全部策略。该接口不持久化健康检查。
     """
     try:
-        health = await check_strategy_health(strategy_id, persist=False)
+        items = list_strategies(status=None if status == "all" else status, limit=limit)
+        healths = []
+        errors = []
+        for item in items:
+            try:
+                healths.append(check_strategy_health(item["id"], persist=False).model_dump(mode="json"))
+            except Exception as exc:
+                errors.append({
+                    "strategy_id": item.get("id"),
+                    "strategy_name": item.get("name"),
+                    "error": str(exc),
+                })
+        return {
+            "strategies": healths,
+            "errors": errors,
+            "total": len(healths),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取健康度概览失败: {str(e)}")
+
+
+@router.get("/strategies/{strategy_id}")
+async def get_strategy_health_status(strategy_id: str):
+    """
+    获取单个策略的健康度（简化版）
+    """
+    try:
+        health = check_strategy_health(strategy_id, persist=False)
         return health
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取健康度失败: {str(e)}")
+
+
+@router.get("/strategies/{strategy_id}/detailed")
+async def get_strategy_health_detailed(strategy_id: str):
+    """
+    获取单个策略的详细健康度（包含子分项）
+    """
+    try:
+        from app.services.strategy_library import get_latest_strategy_baseline
+        from app.services.strategy_monitor import _recent_signal_performance, list_strategy_signals
+        from app.services.health_scoring import calculate_comprehensive_health
+        from app.services.data_quality import get_quality_summary_for_symbols
+
+        strategy = get_strategy(strategy_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"策略{strategy_id}不存在")
+
+        # 获取数据
+        historical_baseline = get_latest_strategy_baseline(strategy_id)
+        recent_performance = _recent_signal_performance(strategy_id, days=60)
+
+        # 获取数据质量
+        signals = list_strategy_signals(strategy_id, days=60)
+        signal_symbols = list(set([s.get("symbol") for s in signals if s.get("symbol")]))
+        quality_summary = get_quality_summary_for_symbols(signal_symbols) if signal_symbols else {"quality_grade": "D"}
+
+        # 计算详细健康度
+        health_detail = calculate_comprehensive_health(
+            strategy_id=strategy_id,
+            recent_performance=recent_performance,
+            historical_baseline=historical_baseline,
+            data_quality_grade=quality_summary.get("quality_grade", "B")
+        )
+
+        return {
+            "strategy_id": strategy_id,
+            "strategy_name": strategy.get("name"),
+            "health_detail": health_detail.model_dump(mode="json"),
+            "data_quality": quality_summary,
+            "recent_performance": recent_performance,
+            "baseline": historical_baseline
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取详细健康度失败: {str(e)}")
 
 
 @router.get("/strategies/{strategy_id}/signals")
@@ -65,7 +140,7 @@ async def get_strategy_signals(strategy_id: str, days: int = 60):
 
 
 @router.post("/strategies/{strategy_id}/run-signals")
-async def run_strategy_signals(strategy_id: str):
+async def run_strategy_signals_endpoint(strategy_id: str):
     """
     手动运行单个策略并保存选股信号
     """
@@ -74,7 +149,7 @@ async def run_strategy_signals(strategy_id: str):
         if not strategy:
             raise HTTPException(status_code=404, detail=f"策略{strategy_id}不存在")
         result = record_strategy_signals(strategy_id, StrategySpec(**strategy["spec"]))
-        health = await check_strategy_health(strategy_id, persist=True)
+        health = check_strategy_health(strategy_id, persist=True)
         return {"strategy_id": strategy_id, "run": result, "health": health}
     except HTTPException:
         raise
@@ -82,7 +157,7 @@ async def run_strategy_signals(strategy_id: str):
         raise HTTPException(status_code=500, detail=f"运行策略信号失败: {str(e)}")
 
 
-@router.post("/run-daily-check", response_model=MonitoringReport)
+@router.post("/run-daily-check")
 async def trigger_daily_check():
     """
     手动触发每日健康检查

@@ -1,7 +1,6 @@
 """策略自进化闭环 smoke 测试。"""
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 
@@ -20,7 +19,7 @@ from app.services.strategy_monitor import check_strategy_health
 from app.services.strategy_optimizer import OptimizationResult
 
 
-async def main() -> None:
+def main() -> None:
     strategy_id = "smoke_evolution_strategy_tmp"
     job_id = "smoke_evolution_job_tmp"
 
@@ -43,11 +42,11 @@ async def main() -> None:
     )
 
     before = len(get_strategy_health_checks(strategy_id, days=1))
-    await check_strategy_health(strategy_id, persist=False)
+    check_strategy_health(strategy_id, persist=False)
     after_read = len(get_strategy_health_checks(strategy_id, days=1))
     assert after_read == before, "只读健康查询不应写入历史"
 
-    await check_strategy_health(strategy_id, persist=True)
+    check_strategy_health(strategy_id, persist=True)
     after_check = len(get_strategy_health_checks(strategy_id, days=1))
     assert after_check == before + 1, "显式健康检查应写入历史"
 
@@ -97,4 +96,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

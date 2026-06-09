@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Any, Optional
 
 from app.services.alerts import get_alert_service
 
@@ -14,6 +14,7 @@ class AlertCreate(BaseModel):
     threshold: float
     enabled: bool = True
     cooldown_minutes: int = 60
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class AlertUpdate(BaseModel):
@@ -21,6 +22,7 @@ class AlertUpdate(BaseModel):
     threshold: Optional[float] = None
     enabled: Optional[bool] = None
     cooldown_minutes: Optional[int] = None
+    payload: Optional[dict[str, Any]] = None
 
 
 @router.get("/rules")

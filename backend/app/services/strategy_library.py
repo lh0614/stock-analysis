@@ -124,6 +124,9 @@ def init_strategy_library_tables():
                 forward_return_5d REAL,
                 forward_return_20d REAL,
                 evaluated_at TEXT,
+                market_state TEXT,
+                market_trend TEXT,
+                market_volatility TEXT,
                 created_at TEXT NOT NULL,
                 UNIQUE(strategy_id, symbol, signal_date),
                 FOREIGN KEY (strategy_id) REFERENCES strategy_specs(id)
@@ -161,6 +164,9 @@ def init_strategy_library_tables():
             ON strategy_health_checks(strategy_id, created_at)
         """
         )
+        _ensure_column(conn, "strategy_health_checks", "sub_scores_json", "TEXT")
+        _ensure_column(conn, "strategy_health_checks", "confidence_level", "TEXT")
+        _ensure_column(conn, "strategy_health_checks", "data_quality_json", "TEXT")
 
         conn.commit()
 
@@ -531,6 +537,18 @@ def save_strategy_signals(
     created_at = datetime.now().isoformat()
     saved = 0
 
+    # 获取当前市场环境
+    from app.services.strategy_environment import get_current_market_state
+    try:
+        market_state_data = get_current_market_state(signal_date)
+        market_state = market_state_data.get("state")
+        market_trend = market_state_data.get("trend")
+        market_volatility = market_state_data.get("volatility_level")
+    except Exception:
+        market_state = None
+        market_trend = None
+        market_volatility = None
+
     with get_conn() as conn:
         for candidate in candidates:
             item = _candidate_to_dict(candidate)
@@ -549,8 +567,9 @@ def save_strategy_signals(
                 """
                 INSERT OR IGNORE INTO strategy_signals
                 (id, strategy_id, run_id, symbol, name, signal_date, score, rank,
-                 quality_level, factor_values_json, matched_conditions_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 quality_level, factor_values_json, matched_conditions_json,
+                 market_state, market_trend, market_volatility, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal_id,
@@ -564,6 +583,9 @@ def save_strategy_signals(
                     item.get("quality_level"),
                     json.dumps(factor_values, ensure_ascii=False, default=_json_default),
                     json.dumps(matched_conditions, ensure_ascii=False, default=_json_default),
+                    market_state,
+                    market_trend,
+                    market_volatility,
                     created_at,
                 ),
             )
@@ -893,7 +915,10 @@ def save_strategy_health_check(
     recent_win_rate: float | None,
     recent_avg_return: float | None,
     degradation_signals: list[str],
-    recommendations: list[str]
+    recommendations: list[str],
+    sub_scores: dict[str, Any] | None = None,
+    confidence_level: str | None = None,
+    data_quality: dict[str, Any] | None = None,
 ) -> str:
     """保存策略健康度检查记录"""
     init_strategy_library_tables()
@@ -904,8 +929,9 @@ def save_strategy_health_check(
             INSERT INTO strategy_health_checks
             (id, strategy_id, health_score, status, recent_signals_count,
              recent_win_rate, recent_avg_return, degradation_signals_json,
-             recommendations_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             recommendations_json, sub_scores_json, confidence_level,
+             data_quality_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 check_id,
@@ -917,6 +943,9 @@ def save_strategy_health_check(
                 recent_avg_return,
                 json.dumps(degradation_signals, ensure_ascii=False),
                 json.dumps(recommendations, ensure_ascii=False),
+                json.dumps(sub_scores or {}, ensure_ascii=False, default=_json_default),
+                confidence_level,
+                json.dumps(data_quality or {}, ensure_ascii=False, default=_json_default),
                 datetime.now().isoformat(),
             ),
         )
@@ -949,6 +978,9 @@ def get_strategy_health_checks(strategy_id: str, days: int = 30) -> list[dict[st
                 "recent_avg_return": row["recent_avg_return"],
                 "degradation_signals": json.loads(row["degradation_signals_json"]) if row["degradation_signals_json"] else [],
                 "recommendations": json.loads(row["recommendations_json"]) if row["recommendations_json"] else [],
+                "sub_scores": json.loads(row["sub_scores_json"]) if "sub_scores_json" in row.keys() and row["sub_scores_json"] else {},
+                "confidence_level": row["confidence_level"] if "confidence_level" in row.keys() else None,
+                "data_quality": json.loads(row["data_quality_json"]) if "data_quality_json" in row.keys() and row["data_quality_json"] else {},
                 "created_at": row["created_at"],
             }
             for row in rows

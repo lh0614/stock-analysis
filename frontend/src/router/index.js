@@ -87,6 +87,16 @@ const router = createRouter({
           path: 'market',
           name: 'market',
           component: () => import('../views/MarketEnvironmentView.vue')
+        },
+        {
+          path: 'p2-research',
+          name: 'p2-research',
+          component: () => import('../views/P2ResearchView.vue')
+        },
+        {
+          path: 'system-status',
+          name: 'system-status',
+          component: () => import('../views/SystemStatusView.vue')
         }
       ]
     }

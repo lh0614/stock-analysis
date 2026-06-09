@@ -20,7 +20,8 @@ export const menuTree = [
     children: [
       { index: '/workflows', title: '工作流记忆', route: '/workflows' },
       { index: '/strategies', title: '策略工坊', route: '/strategies' },
-      { index: '/strategy-library', title: '策略库', route: '/strategy-library' }
+      { index: '/strategy-library', title: '策略库', route: '/strategy-library' },
+      { index: '/p2-research', title: 'P2预测风控', route: '/p2-research' }
     ]
   },
   {
@@ -36,6 +37,7 @@ export const menuTree = [
     title: '系统管理',
     icon: 'Setting',
     children: [
+      { index: '/system-status', title: '系统状态', route: '/system-status' },
       { index: '/sync-scheduler', title: '数据同步', route: '/sync-scheduler' },
       { index: '/data-quality', title: '数据质量', route: '/data-quality' },
       { index: '/market', title: '市场环境', route: '/market' },
@@ -78,6 +80,10 @@ export const routeMeta = {
     title: '策略库',
     breadcrumb: [{ title: '策略配置' }, { title: '策略库', path: '/strategy-library' }]
   },
+  '/p2-research': {
+    title: 'P2预测风控',
+    breadcrumb: [{ title: '策略配置' }, { title: 'P2预测风控', path: '/p2-research' }]
+  },
   '/alerts': {
     title: '预警中心',
     breadcrumb: [{ title: '监控预警' }, { title: '预警中心', path: '/alerts' }]
@@ -113,6 +119,10 @@ export const routeMeta = {
   '/reviews': {
     title: '复盘中心',
     breadcrumb: [{ title: '系统管理' }, { title: '复盘中心', path: '/reviews' }]
+  },
+  '/system-status': {
+    title: '系统状态',
+    breadcrumb: [{ title: '系统管理' }, { title: '系统状态', path: '/system-status' }]
   }
 }
 

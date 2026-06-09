@@ -261,3 +261,79 @@ def list_missing_bars(limit: int = 100) -> list[dict[str, Any]]:
             pass
         out.append(row)
     return out
+
+
+def get_quality_summary_for_symbols(symbols: list[str]) -> dict[str, Any]:
+    """
+    获取一组股票的数据质量摘要
+
+    Args:
+        symbols: 股票代码列表
+
+    Returns:
+        数据质量摘要，包含总数、各等级分布、最新行情日期等
+    """
+    if not symbols:
+        return {
+            "total_symbols": 0,
+            "quality_distribution": {"A": 0, "B": 0, "C": 0, "D": 0},
+            "has_factor_data": 0,
+            "missing_factor_data": 0,
+            "latest_trade_date": None,
+            "average_stale_days": 0,
+            "quality_grade": "D",
+            "recommendation": "无股票数据"
+        }
+
+    quality_counts = {"A": 0, "B": 0, "C": 0, "D": 0}
+    has_data_count = 0
+    stale_days_sum = 0
+    latest_dates = []
+
+    for symbol in symbols:
+        quality = assess_symbol(symbol)
+        level = quality.get("quality_level", "D")
+        quality_counts[level] = quality_counts.get(level, 0) + 1
+
+        if quality.get("bar_count", 0) > 0:
+            has_data_count += 1
+
+        stale_days = quality.get("stale_days", 0)
+        stale_days_sum += stale_days
+
+        latest_date = quality.get("latest_trade_date")
+        if latest_date:
+            latest_dates.append(latest_date)
+
+    total = len(symbols)
+    missing_count = total - has_data_count
+    avg_stale = stale_days_sum / total if total > 0 else 0
+
+    # 计算整体质量等级
+    d_pct = quality_counts["D"] / total if total > 0 else 0
+    c_pct = quality_counts["C"] / total if total > 0 else 0
+
+    if d_pct > 0.3:
+        overall_grade = "D"
+        recommendation = "数据质量严重不足，不建议依据该结果决策"
+    elif d_pct > 0.1 or c_pct > 0.5:
+        overall_grade = "C"
+        recommendation = "数据质量一般，结论仅供参考"
+    elif c_pct > 0.2:
+        overall_grade = "B"
+        recommendation = "数据质量较好，可作参考"
+    else:
+        overall_grade = "A"
+        recommendation = "数据质量优秀"
+
+    return {
+        "total_symbols": total,
+        "quality_distribution": quality_counts,
+        "has_factor_data": has_data_count,
+        "missing_factor_data": missing_count,
+        "latest_trade_date": max(latest_dates) if latest_dates else None,
+        "average_stale_days": round(avg_stale, 1),
+        "quality_grade": overall_grade,
+        "recommendation": recommendation
+    }
+

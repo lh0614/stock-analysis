@@ -184,30 +184,7 @@
             </div>
           </div>
 
-          <div class="metric-grid">
-            <div class="metric-tile">
-              <span class="metric-label">健康度</span>
-              <strong>{{ currentHealth.health_score.toFixed(1) }}</strong>
-            </div>
-            <div class="metric-tile">
-              <span class="metric-label">状态</span>
-              <el-tag :type="getHealthStatusType(currentHealth.status)">
-                {{ getHealthStatusLabel(currentHealth.status) }}
-              </el-tag>
-            </div>
-            <div class="metric-tile">
-              <span class="metric-label">信号数</span>
-              <strong>{{ currentHealth.recent_signals_count }}</strong>
-            </div>
-            <div class="metric-tile">
-              <span class="metric-label">胜率</span>
-              <strong>{{ formatPercent(currentHealth.recent_win_rate) }}</strong>
-            </div>
-            <div class="metric-tile">
-              <span class="metric-label">平均收益</span>
-              <strong>{{ formatPercent(currentHealth.recent_avg_return) }}</strong>
-            </div>
-          </div>
+          <HealthScoreDetail :health="currentHealth" />
 
           <!-- 健康度历史趋势 -->
           <div class="health-section">
@@ -330,6 +307,12 @@
                   </div>
                 </template>
               </el-table-column>
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" link type="primary" @click="compareVersion(row)">对比</el-button>
+                  <el-button size="small" link type="warning" @click="rollbackVersion(row)">回滚</el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </div>
 
@@ -369,14 +352,58 @@
         </template>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="versionCompareVisible" title="策略版本对比" width="860px">
+      <div v-if="versionCompare" class="version-compare">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="当前版本">{{ versionCompare.current_version || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="目标版本">{{ versionCompare.target_version || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div class="health-section">
+          <div class="section-title">摘要差异</div>
+          <el-table :data="summaryDiffRows" size="small" stripe>
+            <el-table-column prop="field" label="字段" width="120" />
+            <el-table-column prop="before" label="当前" />
+            <el-table-column prop="after" label="目标版本" />
+          </el-table>
+        </div>
+
+        <div class="health-section">
+          <div class="section-title">入场条件变化</div>
+          <el-descriptions :column="3" border size="small">
+            <el-descriptions-item label="新增">{{ versionCompare.diff?.entry_conditions?.added?.length || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="移除">{{ versionCompare.diff?.entry_conditions?.removed?.length || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="变更">{{ versionCompare.diff?.entry_conditions?.changed?.length || 0 }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <div class="health-section">
+          <div class="section-title">规则变化</div>
+          <el-tag :type="versionCompare.diff?.ranking?.changed ? 'warning' : 'success'" effect="plain">
+            排序规则{{ versionCompare.diff?.ranking?.changed ? '有变化' : '无变化' }}
+          </el-tag>
+          <el-tag :type="versionCompare.diff?.position?.changed ? 'warning' : 'success'" effect="plain">
+            仓位规则{{ versionCompare.diff?.position?.changed ? '有变化' : '无变化' }}
+          </el-tag>
+          <el-tag :type="versionCompare.diff?.exit_conditions?.changed ? 'warning' : 'success'" effect="plain">
+            退出规则{{ versionCompare.diff?.exit_conditions?.changed ? '有变化' : '无变化' }}
+          </el-tag>
+          <el-tag :type="versionCompare.diff?.risk_filters?.changed ? 'warning' : 'success'" effect="plain">
+            风控过滤{{ versionCompare.diff?.risk_filters?.changed ? '有变化' : '无变化' }}
+          </el-tag>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
 import * as echarts from 'echarts'
+import HealthScoreDetail from '@/components/HealthScoreDetail.vue'
 
 const loading = ref(false)
 const strategies = ref([])
@@ -401,6 +428,17 @@ const autoOptimizeLoading = ref(false)
 const strategyVersions = ref([])
 const versionsLoading = ref(false)
 const fullCycleLoading = ref(false)
+const versionCompareVisible = ref(false)
+const versionCompare = ref(null)
+
+const summaryDiffRows = computed(() => {
+  const summary = versionCompare.value?.diff?.summary || {}
+  return Object.entries(summary).map(([field, value]) => ({
+    field,
+    before: value?.before ?? '-',
+    after: value?.after ?? '-'
+  }))
+})
 
 onMounted(() => {
   loadStrategies()
@@ -506,10 +544,10 @@ async function viewHealth(strategyId) {
 async function runFullCycle() {
   fullCycleLoading.value = true
   try {
-    const res = await axios.post('/api/v1/strategy-monitor/run-full-cycle', null, {
-      params: { auto_optimize: true }
+    const res = await axios.post('/api/v1/strategy-cycle/trigger', {
+      trigger_type: 'manual'
     })
-    ElMessage.success(`闭环完成：${res.data.total_strategies} 个策略，触发优化 ${res.data.optimization_triggered_count} 个`)
+    ElMessage.success(res.data.message || '策略闭环已启动，可在数据同步页查看进度')
     await loadStrategies()
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || '执行完整监控闭环失败')
@@ -541,6 +579,36 @@ async function loadStrategyVersions(strategyId) {
     ElMessage.error('加载策略版本失败')
   } finally {
     versionsLoading.value = false
+  }
+}
+
+async function compareVersion(row) {
+  if (!currentHealthStrategyId.value || !row?.id) return
+  try {
+    const res = await axios.get(`/api/v1/strategy-library/${currentHealthStrategyId.value}/versions/${row.id}/compare`)
+    versionCompare.value = res.data
+    versionCompareVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '版本对比失败')
+  }
+}
+
+async function rollbackVersion(row) {
+  if (!currentHealthStrategyId.value || !row?.id) return
+  try {
+    await ElMessageBox.confirm(`确认回滚到版本 ${row.version}？当前版本会先保存为回滚前快照。`, '版本回滚', {
+      confirmButtonText: '确认回滚',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await axios.post(`/api/v1/strategy-library/${currentHealthStrategyId.value}/versions/${row.id}/rollback`)
+    ElMessage.success('策略已回滚')
+    await viewHealth(currentHealthStrategyId.value)
+    loadStrategies()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || '版本回滚失败')
+    }
   }
 }
 
@@ -877,15 +945,6 @@ function formatPercent(value) {
   return `${(Number(value) * 100).toFixed(2)}%`
 }
 
-function getHealthStatusLabel(status) {
-  const map = { healthy: '健康', degraded: '衰减', failing: '失效' }
-  return map[status] || status
-}
-
-function getHealthStatusType(status) {
-  const map = { healthy: 'success', degraded: 'warning', failing: 'danger' }
-  return map[status] || 'info'
-}
 
 function getVersionDiff(versionRow) {
   const current = currentStrategy.value?.spec || {}
@@ -978,33 +1037,6 @@ function getVersionDiff(versionRow) {
   color: var(--el-text-color-secondary);
 }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.metric-tile {
-  min-height: 76px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  background: var(--el-fill-color-lighter);
-}
-
-.metric-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.metric-tile strong {
-  font-size: 20px;
-  line-height: 1.2;
-}
-
 .health-section {
   margin-top: 18px;
 }
@@ -1037,10 +1069,6 @@ function getVersionDiff(versionRow) {
 }
 
 @media (max-width: 900px) {
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
-  }
-
   .health-toolbar {
     align-items: flex-start;
     flex-direction: column;

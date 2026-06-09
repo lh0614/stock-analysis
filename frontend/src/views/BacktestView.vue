@@ -33,6 +33,38 @@
       <el-col :xs="24" :md="8"><el-card shadow="never">夏普：{{ selectedMetrics.sharpe ?? '—' }}</el-card></el-col>
     </el-row>
 
+    <el-row v-if="selectedDetail" :gutter="12" style="margin-bottom:12px">
+      <el-col :xs="24" :md="12">
+        <DataQualityCard
+          v-if="selectedDetail.data_quality_summary"
+          :quality-summary="selectedDetail.data_quality_summary"
+          show-details
+        />
+      </el-col>
+      <el-col :xs="24" :md="12">
+        <el-card shadow="never">
+          <template #header>回测执行约束</template>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="滑点">
+              {{ formatPercent(selectedDetail.config?.costs?.slippage) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="佣金">
+              {{ formatPercent(selectedDetail.config?.costs?.commission) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="印花税">
+              {{ formatPercent(selectedDetail.config?.costs?.stamp_tax) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="跳过交易">
+              {{ selectedMetrics.skipped_count || 0 }}
+            </el-descriptions-item>
+            <el-descriptions-item label="市场过滤">
+              {{ selectedDetail.config?.market_filter ? '启用' : '未启用' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-card shadow="never" style="margin-bottom:12px">
       <template #header>权益曲线（简表）</template>
       <el-table :data="equityPreview" size="small" height="220">
@@ -68,6 +100,7 @@ import { onMounted, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import backtestsApi from '@/api/backtests'
 import ComplianceDisclaimer from '@/components/common/ComplianceDisclaimer.vue'
+import DataQualityCard from '@/components/DataQualityCard.vue'
 
 const symbolsText = ref('600519,000001,300750')
 const strategy = ref('portfolio_equal_weight')
@@ -80,6 +113,7 @@ const trades = ref([])
 const equityPreview = ref([])
 
 const selectedMetrics = computed(() => selectedRun.value?.detail?.metrics || selectedRun.value?.metrics || {})
+const selectedDetail = computed(() => selectedRun.value?.detail || null)
 
 async function loadRuns() {
   const data = await backtestsApi.runs()
@@ -106,6 +140,11 @@ async function runBacktest() {
   } finally {
     running.value = false
   }
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) return '—'
+  return `${(Number(value) * 100).toFixed(2)}%`
 }
 
 onMounted(loadRuns)

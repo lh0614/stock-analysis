@@ -20,6 +20,12 @@ from app.services.strategy_library import (
     reject_optimization_result,
     save_optimization_result,
 )
+from app.services.strategy_research import (
+    batch_backtest_strategies,
+    market_state_backtest_analysis,
+    parameter_sensitivity_analysis,
+    rolling_backtest_analysis,
+)
 
 router = APIRouter()
 
@@ -37,6 +43,21 @@ class OptimizeResponse(BaseModel):
     """优化响应"""
     job_id: str
     result: OptimizationResult
+
+
+class BatchBacktestRequest(BaseModel):
+    strategy_specs: List[Dict[str, Any]]
+    objective: str = "out_sample_sharpe"
+    save_recommended: bool = False
+    top_n: int = 2
+
+
+class ResearchBacktestRequest(BaseModel):
+    strategy_spec: Dict[str, Any]
+    window_days: int = 365
+    step_days: int = 180
+    factor: Optional[str] = None
+    multipliers: Optional[List[float]] = None
 
 
 @router.post("/optimize", response_model=OptimizeResponse)
@@ -76,6 +97,58 @@ async def optimize_strategy_endpoint(request: OptimizeRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"优化失败: {str(e)}")
+
+
+@router.post("/batch-backtest")
+async def batch_backtest_endpoint(request: BatchBacktestRequest):
+    """
+    批量回测多个候选策略并输出排行榜。
+
+    不合格策略只返回过滤原因；save_recommended=true 时仅保存推荐观察策略。
+    """
+    if not request.strategy_specs:
+        raise HTTPException(status_code=400, detail="请提供候选策略列表")
+    try:
+        return batch_backtest_strategies(
+            specs=request.strategy_specs,
+            objective=request.objective,
+            save_recommended=request.save_recommended,
+            top_n=request.top_n,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批量回测失败: {str(e)}")
+
+
+@router.post("/rolling-backtest")
+async def rolling_backtest_endpoint(request: ResearchBacktestRequest):
+    try:
+        return rolling_backtest_analysis(
+            request.strategy_spec,
+            window_days=request.window_days,
+            step_days=request.step_days,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"滚动回测失败: {str(e)}")
+
+
+@router.post("/parameter-sensitivity")
+async def parameter_sensitivity_endpoint(request: ResearchBacktestRequest):
+    try:
+        return parameter_sensitivity_analysis(
+            request.strategy_spec,
+            factor=request.factor,
+            multipliers=request.multipliers,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"参数敏感性分析失败: {str(e)}")
+
+
+@router.post("/market-state-backtest")
+async def market_state_backtest_endpoint(request: ResearchBacktestRequest):
+    try:
+        return market_state_backtest_analysis(request.strategy_spec)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"市场状态拆分回测失败: {str(e)}")
 
 
 @router.get("/jobs")

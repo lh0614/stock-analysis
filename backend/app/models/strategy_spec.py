@@ -133,4 +133,6 @@ class ScreenerResult(BaseModel):
     total_scanned: int
     total_matched: int
     execution_time_ms: float
+    data_quality_summary: dict[str, Any] | None = None  # 数据质量摘要
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+

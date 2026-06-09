@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import threading
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -171,6 +172,10 @@ class SyncSchedulerService:
         )
         self._progress = {}
 
+        # 如果数据同步成功，自动触发策略闭环
+        if status == "success":
+            self._trigger_strategy_cycle_after_sync()
+
     def _execute_sync(self, sync_mode: str, run_lease: SyncRunLease) -> None:
         svc = get_universe_service()
         final_message: str | None = None
@@ -299,6 +304,28 @@ class SyncSchedulerService:
         self._last_scheduled_date = today
 
         await self.trigger_run(trigger="scheduled")
+
+    def _trigger_strategy_cycle_after_sync(self) -> None:
+        """数据同步成功后，在后台线程触发策略闭环"""
+        def _run_cycle():
+            try:
+                # 延迟导入避免循环依赖
+                from app.services.strategy_cycle import get_strategy_cycle_service
+
+                cycle_service = get_strategy_cycle_service()
+                if cycle_service.is_running():
+                    print("策略闭环已在运行中，跳过自动触发")
+                    return
+
+                print("数据同步完成，自动触发策略闭环...")
+                result = cycle_service.run_cycle(trigger_type="auto")
+                print(f"策略闭环执行完成: {result.get('status')}")
+            except Exception as e:
+                print(f"自动触发策略闭环失败: {e}")
+
+        # 在新线程中执行，避免阻塞主调度循环
+        thread = threading.Thread(target=_run_cycle, daemon=True)
+        thread.start()
 
     async def run_loop(self) -> None:
         while True:

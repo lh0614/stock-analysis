@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     CACHE_DIR: str = str(DEFAULT_STOCK_POOL_DIR)
     CACHE_EXPIRE_DAYS: int = 1
 
+    # DeepSeek / OpenAI-compatible intent parser. Empty API key disables LLM parsing.
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_TIMEOUT_SECONDS: int = 30
+    INTENT_LLM_ENABLED: bool = True
+
     class Config:
         env_file = ".env"
 

@@ -23,6 +23,11 @@ from app.services.strategy_library import (
     list_optimization_results,
     save_optimization_result,
 )
+from app.services.health_scoring import (
+    calculate_comprehensive_health,
+    HealthScoreDetail
+)
+from app.services.data_quality import get_quality_summary_for_symbols
 
 
 class StrategyHealth(BaseModel):
@@ -34,8 +39,15 @@ class StrategyHealth(BaseModel):
 
     # 最近表现
     recent_signals_count: int = Field(default=0, description="最近信号数量")
+    recent_matured_signals_count: int = Field(default=0, description="已成熟信号数量")
     recent_win_rate: Optional[float] = Field(None, description="最近胜率")
     recent_avg_return: Optional[float] = Field(None, description="最近平均收益")
+    max_drawdown: float = Field(default=0.0, description="最近最大回撤")
+
+    # 多维评分解释
+    sub_scores: dict[str, float] = Field(default_factory=dict, description="健康度子分项")
+    confidence_level: str = Field(default="low", description="评分置信度: high/medium/low")
+    data_quality: dict[str, Any] = Field(default_factory=dict, description="数据质量摘要")
 
     # 衰减信号
     degradation_signals: List[str] = Field(default_factory=list)
@@ -265,6 +277,50 @@ def _recent_signal_performance(strategy_id: str, days: int = 60) -> Dict[str, An
     }
 
 
+def run_strategy_signals(strategy_id: str) -> dict[str, Any]:
+    """
+    运行策略选股并保存当期信号（基于策略库中已保存的策略）
+
+    Args:
+        strategy_id: 策略ID
+
+    Returns:
+        执行结果
+    """
+    strategy = get_strategy(strategy_id)
+    if not strategy:
+        raise ValueError(f"策略{strategy_id}不存在")
+
+    spec = StrategySpec(**strategy['spec'])
+    return record_strategy_signals(strategy_id, spec)
+
+
+def should_trigger_optimization(health: StrategyHealth) -> bool:
+    """
+    判断是否应该触发优化
+
+    Args:
+        health: 策略健康度
+
+    Returns:
+        是否应该触发优化
+    """
+    # 健康度小于70分，或状态为 degraded/failing 时触发优化
+    if health.health_score < 70:
+        return True
+
+    if health.status in ["degraded", "failing"]:
+        return True
+
+    # 如果有关键衰减信号也触发
+    critical_signals = ["连续", "胜率", "回撤"]
+    for signal in health.degradation_signals:
+        if any(keyword in signal for keyword in critical_signals):
+            return True
+
+    return False
+
+
 def record_strategy_signals(strategy_id: str, spec: StrategySpec) -> dict[str, Any]:
     """运行策略选股并保存当期信号。"""
     result = run_intelligent_screening(spec)
@@ -295,9 +351,9 @@ def record_strategy_signals(strategy_id: str, spec: StrategySpec) -> dict[str, A
     }
 
 
-async def check_strategy_health(strategy_id: str, persist: bool = False) -> StrategyHealth:
+def check_strategy_health(strategy_id: str, persist: bool = False) -> StrategyHealth:
     """
-    检查单个策略健康度
+    检查单个策略健康度（使用新的多维度评分模型）
     """
     # 1. 获取策略
     strategy = get_strategy(strategy_id)
@@ -312,56 +368,87 @@ async def check_strategy_health(strategy_id: str, persist: bool = False) -> Stra
     # 3. 获取最近真实信号表现
     recent_performance = _recent_signal_performance(strategy_id, days=60)
 
-    # 4. 计算健康度
-    health_score = calculate_health_score(
-        strategy_id,
-        recent_performance,
-        historical_baseline
+    # 4. 获取最近信号的股票代码，用于数据质量评估
+    signals = list_strategy_signals(strategy_id, days=60)
+    signal_symbols = list(set([s.get("symbol") for s in signals if s.get("symbol")]))
+
+    # 5. 评估数据质量
+    quality_summary = get_quality_summary_for_symbols(signal_symbols) if signal_symbols else {"quality_grade": "D"}
+    data_quality_grade = quality_summary.get("quality_grade", "B")
+
+    # 6. 使用新的健康度评分模型
+    health_detail = calculate_comprehensive_health(
+        strategy_id=strategy_id,
+        recent_performance=recent_performance,
+        historical_baseline=historical_baseline,
+        data_quality_grade=data_quality_grade
     )
 
-    # 5. 检测衰减信号
-    degradation_signals = detect_degradation_signals(
-        recent_performance,
-        historical_baseline
-    )
+    # 7. 结合市场环境分析健康度衰减原因（P2-2 集成）
+    degradation_cause = None
+    if health_detail.status in ["degraded", "failing"]:
+        try:
+            from app.services.strategy_environment import (
+                classify_strategy_environment,
+                analyze_health_degradation_with_market,
+            )
 
-    # 6. 确定状态
-    if health_score >= 70:
-        status = "healthy"
-    elif health_score >= 50:
-        status = "degraded"
-    else:
-        status = "failing"
+            # 分类策略环境
+            strategy_labels = classify_strategy_environment(spec=spec)
 
-    # 7. 生成建议
-    recommendations = generate_recommendations(
-        health_score,
-        degradation_signals,
-        spec
-    )
+            # 分析衰减原因
+            degradation_cause = analyze_health_degradation_with_market(
+                strategy_id=strategy_id,
+                health_data={
+                    "health_score": health_detail.health_score,
+                    "status": health_detail.status,
+                    "recent_performance": recent_performance,
+                },
+                strategy_labels=strategy_labels,
+            )
 
+            # 将衰减原因添加到建议中
+            if degradation_cause and degradation_cause.get("cause_type") != "unknown":
+                health_detail.recommended_actions.insert(
+                    0,
+                    f"衰减原因: {degradation_cause.get('explanation', '')} - {degradation_cause.get('recommendation', '')}"
+                )
+        except Exception:
+            # 如果市场环境分析失败，不影响健康度检查
+            pass
+
+    # 8. 持久化（如果需要）
     if persist:
         save_strategy_health_check(
             strategy_id=strategy_id,
-            health_score=health_score,
-            status=status,
+            health_score=health_detail.health_score,
+            status=health_detail.status,
             recent_signals_count=recent_performance['signals_count'],
             recent_win_rate=recent_performance.get('win_rate'),
             recent_avg_return=recent_performance.get('avg_return'),
-            degradation_signals=degradation_signals,
-            recommendations=recommendations,
+            degradation_signals=health_detail.degradation_reasons,
+            recommendations=health_detail.recommended_actions,
+            sub_scores=health_detail.sub_scores.model_dump(mode="json"),
+            confidence_level=health_detail.confidence_level,
+            data_quality=quality_summary,
         )
 
+    # 9. 转换为旧格式兼容返回
     return StrategyHealth(
         strategy_id=strategy_id,
         strategy_name=strategy['name'],
-        health_score=health_score,
-        status=status,
+        health_score=health_detail.health_score,
+        status=health_detail.status,
         recent_signals_count=recent_performance['signals_count'],
+        recent_matured_signals_count=recent_performance.get('matured_signals_count', 0),
         recent_win_rate=recent_performance.get('win_rate'),
         recent_avg_return=recent_performance.get('avg_return'),
-        degradation_signals=degradation_signals,
-        recommendations=recommendations
+        max_drawdown=recent_performance.get('max_drawdown', 0),
+        sub_scores=health_detail.sub_scores.model_dump(mode="json"),
+        confidence_level=health_detail.confidence_level,
+        data_quality=quality_summary,
+        degradation_signals=health_detail.degradation_reasons,
+        recommendations=health_detail.recommended_actions
     )
 
 
@@ -382,7 +469,7 @@ async def run_daily_monitoring() -> MonitoringReport:
             if full_strategy:
                 spec = StrategySpec(**full_strategy["spec"])
                 record_strategy_signals(strategy["id"], spec)
-            health = await check_strategy_health(strategy['id'], persist=True)
+            health = check_strategy_health(strategy['id'], persist=True)
             healths.append(health)
         except Exception as e:
             print(f"检查策略{strategy['id']}健康度失败: {e}")
@@ -448,7 +535,7 @@ async def run_optimization_if_needed(strategy_id: str) -> dict[str, Any]:
         }
 
     # 2. 检查当前策略健康状况
-    health = await check_strategy_health(strategy_id, persist=True)
+    health = check_strategy_health(strategy_id, persist=True)
     matured_waiting = any("尚未形成可评估收益" in s for s in health.degradation_signals)
     if health.recent_signals_count == 0 or matured_waiting:
         return {
@@ -512,7 +599,7 @@ async def run_full_monitoring_cycle(auto_optimize: bool = True) -> dict[str, Any
             spec = StrategySpec(**strategy["spec"])
             step.signal_run = record_strategy_signals(strategy_id, spec)
             update_signal_forward_returns(strategy_id)
-            step.health = await check_strategy_health(strategy_id, persist=True)
+            step.health = check_strategy_health(strategy_id, persist=True)
             if auto_optimize and step.health.status in {"degraded", "failing"}:
                 step.optimization = await run_optimization_if_needed(strategy_id)
         except Exception as exc:

@@ -19,7 +19,18 @@ RULE_LABELS = {
     "rsi_above": "RSI12 高于",
     "rsi_below": "RSI12 低于",
     "composite": "组合条件",
+    "screener_hit": "策略选股命中",
     "quality_d": "数据质量D级",
+}
+
+PRICE_RULES = {
+    "price_above",
+    "price_below",
+    "change_pct_above",
+    "change_pct_below",
+    "rsi_above",
+    "rsi_below",
+    "composite",
 }
 
 
@@ -48,12 +59,13 @@ class AlertService:
         if rule not in RULE_LABELS:
             raise ValueError(f"不支持的规则类型: {rule}")
         payload = data.get("payload") or {}
-        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
+        threshold = float(data.get("threshold", 0))
         with get_conn() as conn:
             conn.execute(
                 """
-                INSERT INTO alerts (id, symbol, name, rule_type, threshold, enabled, cooldown_minutes, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO alerts
+                (id, symbol, name, rule_type, threshold, enabled, cooldown_minutes, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     aid,
@@ -63,6 +75,7 @@ class AlertService:
                     threshold,
                     1 if data.get("enabled", True) else 0,
                     int(data.get("cooldown_minutes", 60)),
+                    json.dumps(payload, ensure_ascii=False) if payload else None,
                     now,
                 ),
             )
@@ -77,12 +90,11 @@ class AlertService:
         cur = self.get(alert_id)
         if not cur:
             return None
-        payload = data.get("payload") or {}
-        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
+        payload = data.get("payload", cur.get("payload") or {})
         with get_conn() as conn:
             conn.execute(
                 """
-                UPDATE alerts SET name=?, threshold=?, enabled=?, cooldown_minutes=?
+                UPDATE alerts SET name=?, threshold=?, enabled=?, cooldown_minutes=?, payload_json=?
                 WHERE id=?
                 """,
                 (
@@ -90,14 +102,13 @@ class AlertService:
                     float(data.get("threshold", cur["threshold"])),
                     1 if data.get("enabled", cur["enabled"]) else 0,
                     int(data.get("cooldown_minutes", cur["cooldown_minutes"])),
+                    json.dumps(payload, ensure_ascii=False) if payload else None,
                     alert_id,
                 ),
             )
         return self.get(alert_id)
 
     def delete(self, alert_id: str) -> bool:
-        payload = data.get("payload") or {}
-        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
         with get_conn() as conn:
             conn.execute("DELETE FROM alert_events WHERE alert_id = ?", (alert_id,))
             cur = conn.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
@@ -134,25 +145,30 @@ class AlertService:
             if datetime.now() - last < timedelta(minutes=alert["cooldown_minutes"]):
                 return None
 
-        end = datetime.now().strftime("%Y-%m-%d")
-        start = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
-        res = self.fetcher.get_stock_data(alert["symbol"], start, end)
-        if not res.get("success") or len(res.get("data") or []) < 2:
-            return None
-
-        records = res["data"]
-        latest = records[-1]
-        prev = records[-2]
-        close = float(latest.get("close") or 0)
-        prev_close = float(prev.get("close") or close)
-        change_pct = ((close - prev_close) / prev_close * 100) if prev_close else 0
-        indicators = compute_indicators(records, ["rsi"])
-        rsi12 = (indicators.get("rsi") or {}).get("rsi12")
-
         rule = alert["rule_type"]
         th = alert["threshold"]
+        payload = alert.get("payload") or {}
         fired = False
         detail = {}
+        close = None
+        change_pct = None
+        rsi12 = None
+
+        if rule in PRICE_RULES:
+            end = datetime.now().strftime("%Y-%m-%d")
+            start = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
+            res = self.fetcher.get_stock_data(alert["symbol"], start, end)
+            if not res.get("success") or len(res.get("data") or []) < 2:
+                return None
+
+            records = res["data"]
+            latest = records[-1]
+            prev = records[-2]
+            close = float(latest.get("close") or 0)
+            prev_close = float(prev.get("close") or close)
+            change_pct = ((close - prev_close) / prev_close * 100) if prev_close else 0
+            indicators = compute_indicators(records, ["rsi"])
+            rsi12 = (indicators.get("rsi") or {}).get("rsi12")
 
         if rule == "price_above":
             fired = close > th
@@ -178,12 +194,43 @@ class AlertService:
             fired = q.get("quality_level") == "D"
             detail = q
         elif rule == "composite":
-            # 简化组合：price_above + rsi_below 由 threshold 与 payload.rsi 共同触发
             from app.services.data_quality import assess_symbol
             q = assess_symbol(alert["symbol"])
-            rsi_th = 30
-            fired = close > th and (rsi12 is not None and rsi12 < rsi_th) and q.get("quality_level") != "D"
-            detail = {"close": close, "threshold": th, "rsi12": rsi12, "rsi_th": rsi_th, "quality": q.get("quality_level")}
+            price_op = payload.get("price_op", "above")
+            rsi_op = payload.get("rsi_op", "below")
+            rsi_th = float(payload.get("rsi_threshold", 30))
+            min_quality = payload.get("min_quality", "C")
+            quality_rank = {"A": 4, "B": 3, "C": 2, "D": 1}
+            price_ok = close > th if price_op == "above" else close < th
+            rsi_ok = (rsi12 is not None and rsi12 < rsi_th) if rsi_op == "below" else (rsi12 is not None and rsi12 > rsi_th)
+            quality_ok = quality_rank.get(q.get("quality_level"), 0) >= quality_rank.get(min_quality, 2)
+            fired = bool(price_ok and rsi_ok and quality_ok)
+            detail = {
+                "close": close,
+                "threshold": th,
+                "price_op": price_op,
+                "rsi12": rsi12,
+                "rsi_op": rsi_op,
+                "rsi_threshold": rsi_th,
+                "quality": q.get("quality_level"),
+                "min_quality": min_quality,
+            }
+        elif rule == "screener_hit":
+            spec_data = payload.get("strategy_spec")
+            if spec_data:
+                from app.models.strategy_spec import StrategySpec
+                from app.services.intelligent_screener import run_intelligent_screening
+                spec = StrategySpec(**spec_data)
+                screening = run_intelligent_screening(spec)
+                hits = [item.model_dump(mode="json") for item in screening.candidates]
+                match = next((item for item in hits if item.get("symbol") == alert["symbol"]), None)
+                fired = match is not None
+                detail = {
+                    "strategy_name": spec.name,
+                    "matched": fired,
+                    "match": match,
+                    "total_matched": len(hits),
+                }
 
         if not fired:
             return None
@@ -191,8 +238,6 @@ class AlertService:
         msg = f"{alert['symbol']} {alert['name']} 已触发"
         now = datetime.now().isoformat()
         eid = str(uuid.uuid4())
-        payload = data.get("payload") or {}
-        threshold = float(data.get("threshold", 0)) if rule != "composite" else 0.0
         with get_conn() as conn:
             conn.execute(
                 """
@@ -212,6 +257,7 @@ class AlertService:
         d = dict(row)
         d["enabled"] = bool(d["enabled"])
         d["rule_label"] = RULE_LABELS.get(d["rule_type"], d["rule_type"])
+        d["payload"] = json.loads(d["payload_json"] or "{}") if d.get("payload_json") else {}
         return d
 
     @staticmethod

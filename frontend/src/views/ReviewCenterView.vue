@@ -23,6 +23,25 @@
         <el-card shadow="never" style="margin-bottom: 12px">
           <div>复盘数：{{ stats.review_count || 0 }}</div>
           <div>累计盈亏：{{ stats.total_pnl || 0 }}</div>
+          <div>平均收益率：{{ formatPercent(stats.avg_pnl_pct) }}</div>
+          <div>执行偏差占比：{{ formatPercent(stats.deviation_ratio) }}</div>
+          <el-divider />
+          <div class="suggestions">
+            <el-tag
+              v-for="item in stats.strategy_revision_suggestions || []"
+              :key="item"
+              type="warning"
+              style="margin: 0 6px 6px 0"
+            >
+              {{ item }}
+            </el-tag>
+          </div>
+          <el-table :data="tagRows" size="small" style="margin-top: 8px">
+            <el-table-column prop="tag" label="问题标签" min-width="160" />
+            <el-table-column prop="count" label="次数" width="80" />
+            <el-table-column prop="loss_count" label="亏损次数" width="90" />
+            <el-table-column prop="pnl" label="标签盈亏" width="100" />
+          </el-table>
         </el-card>
         <el-card shadow="never">
           <template #header>复盘列表</template>
@@ -43,7 +62,7 @@
 <script setup>
 import ComplianceDisclaimer from '@/components/common/ComplianceDisclaimer.vue'
 
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import reviewsApi from '@/api/reviews'
 
@@ -51,6 +70,17 @@ const form = ref({ plan_id: '', pnl: 0, tags: [], lesson: '' })
 const tags = ref([])
 const reviews = ref([])
 const stats = ref({})
+const tagRows = computed(() => {
+  const counts = stats.value.tag_counts || {}
+  const pnl = stats.value.pnl_by_tag || {}
+  const losses = stats.value.loss_tag_counts || {}
+  return Object.keys(counts).map((tag) => ({
+    tag,
+    count: counts[tag],
+    pnl: pnl[tag] || 0,
+    loss_count: losses[tag] || 0
+  }))
+})
 
 async function loadData() {
   const list = await reviewsApi.list()
@@ -63,6 +93,11 @@ async function createReview() {
   await reviewsApi.create(form.value)
   ElMessage.success('复盘已保存')
   await loadData()
+}
+
+function formatPercent(value) {
+  if (value == null || Number.isNaN(Number(value))) return '-'
+  return `${(Number(value) * 100).toFixed(2)}%`
 }
 
 onMounted(loadData)
